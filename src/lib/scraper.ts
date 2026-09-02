@@ -1,0 +1,324 @@
+import { ComicCardItem, ComicDetail, ChapterData, Genre, ComicType } from './types';
+
+const BASE_URL = 'https://komikindo.ch';
+const HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Referer': 'https://komikindo.ch/'
+};
+
+// In-Memory Cache with TTL
+interface CacheEntry<T> {
+  data: T;
+  expiry: number;
+}
+const cache = new Map<string, CacheEntry<any>>();
+
+function getFromCache<T>(key: string): T | null {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() > entry.expiry) {
+    cache.delete(key);
+    return null;
+  }
+  return entry.data;
+}
+
+function setInCache<T>(key: string, data: T, ttlMs: number): void {
+  cache.set(key, {
+    data,
+    expiry: Date.now() + ttlMs
+  });
+}
+
+async function fetchHtml(url: string): Promise<string> {
+  const res = await fetch(url, { headers: HEADERS, next: { revalidate: 180 } });
+  if (!res.ok) {
+    throw new Error(`HTTP error ${res.status} when fetching ${url}`);
+  }
+  return await res.text();
+}
+
+function parseCardsFromHtml(html: string): ComicCardItem[] {
+  const cards: ComicCardItem[] = [];
+  const regex = /<div class=["']animepost["']>([\s\S]*?)<\/div>\s*<\/div>/gi;
+  let match;
+
+  while ((match = regex.exec(html)) !== null) {
+    const cardHtml = match[1];
+    const urlMatch = cardHtml.match(/href=["']https?:\/\/komikindo\.ch\/komik\/([^"'\/]+)\/?["']/i);
+    if (!urlMatch) continue;
+    const slug = urlMatch[1];
+
+    const titleMatch = cardHtml.match(/<h3[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i) ||
+                       cardHtml.match(/title=["']Komik ([^"']+)["']/i);
+    const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : slug;
+
+    const imgMatch = cardHtml.match(/<img[^>]+src=["']([^"']+)["']/i);
+    const thumbnail = imgMatch ? imgMatch[1] : '';
+
+    const typeMatch = cardHtml.match(/class=["']typeflag\s+([^"']+)["']/i);
+    const typeStr = typeMatch ? typeMatch[1].trim() : 'Unknown';
+    const type: ComicType = ['Manga', 'Manhwa', 'Manhua'].includes(typeStr) ? (typeStr as ComicType) : 'Unknown';
+
+    const isColor = cardHtml.includes('warnalabel');
+
+    const chapMatch = cardHtml.match(/<div class=["']lsch["']>[\s\S]*?<a\s+href=["']https?:\/\/komikindo\.ch\/([^"'\/]+)\/?["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?<span class=["']datech["']>([\s\S]*?)<\/span>/i);
+    const latestChapter = chapMatch ? {
+      slug: chapMatch[1],
+      title: chapMatch[2].replace(/<[^>]+>/g, '').trim(),
+      updated: chapMatch[3].replace(/<[^>]+>/g, '').trim()
+    } : null;
+
+    cards.push({
+      title,
+      slug,
+      thumbnail,
+      type,
+      isColor,
+      latestChapter
+    });
+  }
+
+  return cards;
+}
+
+/**
+ * 1. Ambil Komik Berdasarkan Kategori (Manhwa, Manga, Manhua, dll)
+ */
+export async function getComicsByCategory(
+  category: string,
+  page = 1
+): Promise<{ category: string; page: number; hasNextPage: boolean; data: ComicCardItem[] }> {
+  const cleanCat = category.toLowerCase().trim();
+  const cacheKey = `cat_${cleanCat}_p${page}`;
+  const cached = getFromCache<{ category: string; page: number; hasNextPage: boolean; data: ComicCardItem[] }>(cacheKey);
+  if (cached) return cached;
+
+  const url = page === 1 ? `${BASE_URL}/${cleanCat}/` : `${BASE_URL}/${cleanCat}/page/${page}/`;
+  const html = await fetchHtml(url);
+
+  const cards = parseCardsFromHtml(html);
+  const hasNextPage = html.includes(`/page/${page + 1}/`);
+  const result = { category: cleanCat, page, hasNextPage, data: cards };
+
+  setInCache(cacheKey, result, 5 * 60 * 1000); // 5 mins cache
+  return result;
+}
+
+/**
+ * 2. Ambil Komik Berdasarkan Genre
+ */
+export async function getComicsByGenre(
+  genreSlug: string,
+  page = 1
+): Promise<{ genre: string; page: number; hasNextPage: boolean; data: ComicCardItem[] }> {
+  const cleanGenre = genreSlug.toLowerCase().trim();
+  const cacheKey = `genre_${cleanGenre}_p${page}`;
+  const cached = getFromCache<{ genre: string; page: number; hasNextPage: boolean; data: ComicCardItem[] }>(cacheKey);
+  if (cached) return cached;
+
+  const url = page === 1 ? `${BASE_URL}/genres/${cleanGenre}/` : `${BASE_URL}/genres/${cleanGenre}/page/${page}/`;
+  const html = await fetchHtml(url);
+
+  const cards = parseCardsFromHtml(html);
+  const hasNextPage = html.includes(`/page/${page + 1}/`);
+  const result = { genre: cleanGenre, page, hasNextPage, data: cards };
+
+  setInCache(cacheKey, result, 5 * 60 * 1000);
+  return result;
+}
+
+/**
+ * 3. Ambil Komik Terbaru (Paginasi)
+ */
+export async function getLatestComics(page = 1): Promise<{ page: number; hasNextPage: boolean; data: ComicCardItem[] }> {
+  const res = await getComicsByCategory('komik-terbaru', page);
+  return { page: res.page, hasNextPage: res.hasNextPage, data: res.data };
+}
+
+/**
+ * 4. Ambil Komik Populer
+ */
+export async function getPopularComics(): Promise<ComicCardItem[]> {
+  const cacheKey = 'popular_comics';
+  const cached = getFromCache<ComicCardItem[]>(cacheKey);
+  if (cached) return cached;
+
+  const url = `${BASE_URL}/komik-populer/`;
+  const html = await fetchHtml(url);
+  const cards = parseCardsFromHtml(html);
+
+  setInCache(cacheKey, cards, 15 * 60 * 1000); // 15 mins cache
+  return cards;
+}
+
+/**
+ * 5. Pencarian Komik
+ */
+export async function searchComics(query: string, page = 1): Promise<{ query: string; page: number; data: ComicCardItem[] }> {
+  if (!query.trim()) return { query, page, data: [] };
+  
+  const cacheKey = `search_${encodeURIComponent(query.toLowerCase())}_p${page}`;
+  const cached = getFromCache<{ query: string; page: number; data: ComicCardItem[] }>(cacheKey);
+  if (cached) return cached;
+
+  const url = page === 1 ? `${BASE_URL}/?s=${encodeURIComponent(query)}` : `${BASE_URL}/page/${page}/?s=${encodeURIComponent(query)}`;
+  const html = await fetchHtml(url);
+
+  const cards: ComicCardItem[] = [];
+  const regex = /<div class=["']animepost["']>([\s\S]*?)<\/div>\s*<\/div>/gi;
+  let match;
+
+  while ((match = regex.exec(html)) !== null) {
+    const cardHtml = match[1];
+    const urlMatch = cardHtml.match(/href=["']https?:\/\/komikindo\.ch\/komik\/([^"'\/]+)\/?["']/i);
+    if (!urlMatch) continue;
+    const slug = urlMatch[1];
+
+    const titleMatch = cardHtml.match(/<h3[^>]*>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/i) ||
+                       cardHtml.match(/title=["']Komik ([^"']+)["']/i);
+    const title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : slug;
+
+    const imgMatch = cardHtml.match(/<img[^>]+src=["']([^"']+)["']/i);
+    const thumbnail = imgMatch ? imgMatch[1] : '';
+
+    const typeMatch = cardHtml.match(/class=["']typeflag\s+([^"']+)["']/i);
+    const typeStr = typeMatch ? typeMatch[1].trim() : 'Unknown';
+    const type: ComicType = ['Manga', 'Manhwa', 'Manhua'].includes(typeStr) ? (typeStr as ComicType) : 'Unknown';
+
+    cards.push({
+      title,
+      slug,
+      thumbnail,
+      type,
+      isColor: cardHtml.includes('warnalabel'),
+      latestChapter: null
+    });
+  }
+
+  const result = { query, page, data: cards };
+  setInCache(cacheKey, result, 5 * 60 * 1000);
+  return result;
+}
+
+/**
+ * 6. Detail Komik & Daftar Lengkap Chapter
+ */
+export async function getComicDetail(comicSlug: string): Promise<ComicDetail> {
+  const cacheKey = `comic_${comicSlug}`;
+  const cached = getFromCache<ComicDetail>(cacheKey);
+  if (cached) return cached;
+
+  const url = `${BASE_URL}/komik/${comicSlug}/`;
+  const html = await fetchHtml(url);
+
+  const titleMatch = html.match(/<h1[^>]*class=["']entry-title["'][^>]*>([\s\S]*?)<\/h1>/i) ||
+                     html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+  let title = titleMatch ? titleMatch[1].replace(/<[^>]+>/g, '').trim() : comicSlug;
+  title = title.replace(/^Komik\s+/i, '');
+
+  const thumbMatch = html.match(/<div class=["']thumb["'][^>]*>[\s\S]*?<img[^>]+src=["']([^"']+)["']/i) ||
+                     html.match(/<img[^>]+itemprop=["']image["'][^>]*src=["']([^"']+)["']/i);
+  const thumbnail = thumbMatch ? thumbMatch[1] : '';
+
+  const metadata: Record<string, string> = {};
+  const spanMatches = [...html.matchAll(/<span><b>([^<]+)<\/b>\s*:?\s*([^<]+)<\/span>/gi)];
+  spanMatches.forEach(m => {
+    const key = m[1].replace(/:/g, '').trim().toLowerCase();
+    const val = m[2].trim();
+    metadata[key] = val;
+  });
+
+  const synopsisMatch = html.match(/<div[^>]+class=["']entry-content[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+  const synopsis = synopsisMatch ? synopsisMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '';
+
+  const genresRaw = [...html.matchAll(/href=["'](?:https?:\/\/komikindo\.ch)?\/genres\/([^"'\/]+)\/?["'][^>]*>([\s\S]*?)<\/a>/gi)]
+    .map(g => ({ slug: g[1], name: g[2].replace(/<[^>]+>/g, '').trim() }));
+
+  const genres: Genre[] = [];
+  const seenGenres = new Set<string>();
+  for (const g of genresRaw) {
+    if (!seenGenres.has(g.slug) && g.name.length > 0) {
+      seenGenres.add(g.slug);
+      genres.push(g);
+    }
+  }
+
+  const chapters = [];
+  const chapterRegex = /<li[^>]*>[\s\S]*?<span class=["']lchx["']>[\s\S]*?<a\s+href=["']https?:\/\/komikindo\.ch\/([^"'\/]+)\/?["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/span>[\s\S]*?<span class=["']dt["']>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/gi;
+  let cMatch;
+  while ((cMatch = chapterRegex.exec(html)) !== null) {
+    chapters.push({
+      slug: cMatch[1],
+      title: cMatch[2].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim(),
+      date: cMatch[3].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+    });
+  }
+
+  const result: ComicDetail = {
+    title,
+    slug: comicSlug,
+    thumbnail,
+    metadata,
+    synopsis,
+    genres,
+    totalChapters: chapters.length,
+    chapters
+  };
+
+  setInCache(cacheKey, result, 10 * 60 * 1000); // 10 mins
+  return result;
+}
+
+/**
+ * 7. Halaman Baca Chapter (100% Bebas Iklan Judol & Popunder)
+ */
+export async function getChapterImages(chapterSlug: string): Promise<ChapterData> {
+  const cacheKey = `chap_${chapterSlug}`;
+  const cached = getFromCache<ChapterData>(cacheKey);
+  if (cached) return cached;
+
+  const url = `${BASE_URL}/${chapterSlug}/`;
+  const html = await fetchHtml(url);
+
+  const prevMatch = html.match(/<a[^>]+href=["']https?:\/\/komikindo\.ch\/([^"'\/]+)\/?["'][^>]*rel=["']prev["']/i) ||
+                    html.match(/<div class=["']nextprev["']>[\s\S]*?<a href=["']https?:\/\/komikindo\.ch\/([^"'\/]+)\/?["'][^>]*class=["']ch-prev-btn["']/i);
+  const nextMatch = html.match(/<a[^>]+href=["']https?:\/\/komikindo\.ch\/([^"'\/]+)\/?["'][^>]*rel=["']next["']/i) ||
+                    html.match(/<div class=["']nextprev["']>[\s\S]*?<a href=["']https?:\/\/komikindo\.ch\/([^"'\/]+)\/?["'][^>]*class=["']ch-next-btn["']/i);
+  const comicMatch = html.match(/<a[^>]+href=["']https?:\/\/komikindo\.ch\/komik\/([^"'\/]+)\/?["'][^>]*>/i);
+
+  const prevChapter = prevMatch ? prevMatch[1] : null;
+  const nextChapter = nextMatch ? nextMatch[1] : null;
+  const comicSlug = comicMatch ? comicMatch[1] : null;
+
+  let images: string[] = [];
+  const chimgMatch = html.match(/<div[^>]+id=["'](chimg-[a-z0-9_-]+)["'][^>]*>([\s\S]*?)<\/div>/i);
+
+  if (chimgMatch) {
+    images = [...chimgMatch[2].matchAll(/<img[^>]+src=["']([^"']+)["']/gi)].map(m => m[1]);
+  } else {
+    images = [...html.matchAll(/src=["'](https?:\/\/[^"']+\/data\/[^"']+)["']/gi)].map(m => m[1]);
+  }
+
+  // Filter ketat: buang semua GIF blogger judol dan gambar favicon/logo
+  const cleanImages = images.filter(img =>
+    !img.includes('blogger.googleusercontent.com') &&
+    !img.includes('.gif') &&
+    !img.includes('fav.png') &&
+    !img.includes('komikindo') &&
+    (img.includes('/data/') || img.includes('.jpeg') || img.includes('.jpg') || img.includes('.webp') || img.includes('.png'))
+  );
+
+  const result: ChapterData = {
+    chapterSlug,
+    comicSlug,
+    prevChapter,
+    nextChapter,
+    totalImages: cleanImages.length,
+    images: cleanImages
+  };
+
+  setInCache(cacheKey, result, 60 * 60 * 1000); // 1 hour cache
+  return result;
+}
