@@ -2,46 +2,41 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
-:root {
-  --background: #000000;
-  --foreground: #ffffff;
+@layer base {
+  body {
+    background-color: #161616;
+    color: #ffffff;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow-x: hidden;
+  }
 }
 
-body {
-  background-color: #000000;
-  color: #ffffff;
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  font-feature-settings: "ss03", "cv02", "cv03", "cv04", "cv11";
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* Custom Dark Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #111111;
+}
+::-webkit-scrollbar-thumb {
+  background: #333333;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #0084ff;
 }
 
-/* Shopify Smooth Scrollbars */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 5px;
+  width: 6px;
 }
-
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: #0a0e17;
-  border-radius: 9999px;
+  background: #1a1a1a;
 }
-
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: #1e2c31;
-  border-radius: 9999px;
+  background: #383838;
+  border-radius: 3px;
 }
-
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: #c1fbd4;
-}
-
-/* Glass & Sheen utilities */
-.shopify-sheen {
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1);
-}
-
-.shopify-aloe-glow {
-  box-shadow: 0 0 25px rgba(193, 251, 212, 0.2);
+  background: #0084ff;
 }

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { ChapterItem } from '@/lib/types';
-import { Search, ArrowDownCircle, ArrowUpCircle, CheckCircle2, Layers } from 'lucide-react';
+import { Search, ArrowUpDown, Check, BookOpen, ChevronRight } from 'lucide-react';
 
 interface ChapterListProps {
   comicSlug: string;
@@ -11,121 +11,129 @@ interface ChapterListProps {
 }
 
 export default function ChapterList({ comicSlug, chapters }: ChapterListProps) {
-  const [filterQuery, setFilterQuery] = useState('');
-  const [readChapters, setReadChapters] = useState<string[]>([]);
+  const [search, setSearch] = useState('');
+  const [readChapters, setReadChapters] = useState<Set<string>>(new Set());
+  const [isReversed, setIsReversed] = useState(false);
 
   useEffect(() => {
     try {
-      const history = localStorage.getItem('komik_read_chapters');
-      if (history) {
-        setReadChapters(JSON.parse(history));
+      const saved = localStorage.getItem('komik_read_chapters');
+      if (saved) {
+        setReadChapters(new Set(JSON.parse(saved)));
       }
     } catch {}
   }, []);
 
-  const filtered = chapters.filter((c) =>
-    c.title.toLowerCase().includes(filterQuery.toLowerCase()) ||
-    c.slug.toLowerCase().includes(filterQuery.toLowerCase())
-  );
+  const filteredChapters = chapters
+    .filter((c) =>
+      c.title.toLowerCase().includes(search.toLowerCase()) ||
+      c.slug.toLowerCase().includes(search.toLowerCase())
+    )
+    .slice();
 
-  const newestChapter = chapters.length > 0 ? chapters[0] : null;
-  const oldestChapter = chapters.length > 0 ? chapters[chapters.length - 1] : null;
+  if (isReversed) {
+    filteredChapters.reverse();
+  }
+
+  const firstChapter = chapters[chapters.length - 1];
+  const latestChapter = chapters[0];
 
   return (
-    <div className="bg-[#0a0e17] border border-white/[0.08] rounded-2xl p-5 sm:p-7 space-y-6 shadow-[0_4px_20px_rgba(0,0,0,0.5)] shopify-sheen">
-      {/* Header & Search */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="bg-[#1c1c1c] border border-[#2d2d2d] rounded-lg overflow-hidden space-y-4 p-4 sm:p-5 shadow">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2d2d2d] pb-4">
         <div>
-          <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2.5 font-display tracking-tight">
-            <Layers className="w-5 h-5 text-[#c1fbd4]" />
-            Daftar Chapter
-            <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[#1e2c31] text-[#c1fbd4] border border-white/10">
-              {chapters.length}
-            </span>
+          <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+            <BookOpen className="w-5 h-5 text-[#0084ff]" />
+            Daftar Chapter ({chapters.length})
           </h2>
-          <p className="text-xs text-[#9dabad] mt-0.5">Pilih chapter untuk membaca langsung</p>
+          <p className="text-xs text-[#888888] mt-0.5">
+            Baca gratis semua chapter terbaru dan terlama
+          </p>
         </div>
 
-        {/* Shopify Search Pill */}
-        <div className="relative w-full sm:w-72">
+        {/* Quick Jump Buttons */}
+        <div className="flex items-center gap-2">
+          {firstChapter && (
+            <Link
+              href={`/baca/${firstChapter.slug}`}
+              className="px-3 py-1.5 rounded bg-[#2a2a2a] hover:bg-[#0084ff] text-xs font-semibold text-[#cccccc] hover:text-white border border-[#383838] transition-colors"
+            >
+              Awal: {firstChapter.title.replace(/^Chapter\s+/i, 'Ch. ')}
+            </Link>
+          )}
+          {latestChapter && (
+            <Link
+              href={`/baca/${latestChapter.slug}`}
+              className="px-3.5 py-1.5 rounded bg-[#0084ff] hover:bg-[#0070db] text-xs font-bold text-white transition-colors shadow"
+            >
+              Terbaru: {latestChapter.title.replace(/^Chapter\s+/i, 'Ch. ')}
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* Search & Sort Controls */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
           <input
             type="text"
-            value={filterQuery}
-            onChange={(e) => setFilterQuery(e.target.value)}
-            placeholder="Cari chapter (misal: 45)..."
-            className="w-full bg-[#131b26] text-white placeholder-[#71717a] text-xs sm:text-sm rounded-full pl-10 pr-4 py-2 border border-white/10 focus:outline-none focus:border-[#c1fbd4] focus:ring-1 focus:ring-[#c1fbd4] transition-all"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Cari nomor chapter (contoh: 185)..."
+            className="w-full bg-[#222222] text-white placeholder-[#777777] text-xs rounded border border-[#333333] pl-9 pr-4 py-2 focus:outline-none focus:border-[#0084ff]"
           />
-          <Search className="w-4 h-4 text-[#9dabad] absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[#777777] absolute left-3 top-1/2 -translate-y-1/2" />
         </div>
+
+        <button
+          onClick={() => setIsReversed(!isReversed)}
+          className="flex items-center gap-1.5 px-3 py-2 rounded bg-[#222222] hover:bg-[#282828] border border-[#333333] text-xs text-[#cccccc] hover:text-white transition-colors flex-shrink-0"
+          title="Urutkan Chapter"
+        >
+          <ArrowUpDown className="w-3.5 h-3.5 text-[#00a2ff]" />
+          <span className="hidden sm:inline">{isReversed ? 'Terlama' : 'Terbaru'}</span>
+        </button>
       </div>
 
-      {/* Shopify Quick Action Pills */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {oldestChapter && (
-          <Link
-            href={`/baca/${oldestChapter.slug}`}
-            className="flex items-center justify-between p-3.5 rounded-xl bg-[#131b26] hover:bg-[#1b2636] border border-white/10 hover:border-[#c1fbd4]/30 group transition-all"
-          >
-            <div>
-              <span className="text-[10px] text-[#9dabad] uppercase tracking-wider block font-semibold">
-                Chapter Pertama
-              </span>
-              <span className="font-bold text-sm text-white group-hover:text-[#c1fbd4] transition-colors">
-                {oldestChapter.title}
-              </span>
-            </div>
-            <ArrowUpCircle className="w-5 h-5 text-[#9dabad] group-hover:text-[#c1fbd4] group-hover:scale-110 transition-transform" />
-          </Link>
-        )}
-
-        {newestChapter && (
-          <Link
-            href={`/baca/${newestChapter.slug}`}
-            className="flex items-center justify-between p-3.5 rounded-xl bg-[#c1fbd4]/10 hover:bg-[#c1fbd4]/15 border border-[#c1fbd4]/30 group transition-all"
-          >
-            <div>
-              <span className="text-[10px] text-[#c1fbd4] uppercase tracking-wider block font-semibold">
-                Chapter Terbaru
-              </span>
-              <span className="font-bold text-sm text-white group-hover:text-[#c1fbd4] transition-colors">
-                {newestChapter.title}
-              </span>
-            </div>
-            <ArrowDownCircle className="w-5 h-5 text-[#c1fbd4] group-hover:scale-110 transition-transform" />
-          </Link>
-        )}
-      </div>
-
-      {/* Chapter Rows */}
-      <div className="max-h-[480px] overflow-y-auto pr-1 space-y-1.5 custom-scrollbar">
-        {filtered.length > 0 ? (
-          filtered.map((chap) => {
-            const isRead = readChapters.includes(chap.slug);
+      {/* Chapters Table List */}
+      <div className="max-h-96 overflow-y-auto custom-scrollbar border border-[#2d2d2d] rounded bg-[#181818] divide-y divide-[#222222]">
+        {filteredChapters.length > 0 ? (
+          filteredChapters.map((chap) => {
+            const isRead = readChapters.has(chap.slug);
             return (
               <Link
                 key={chap.slug}
                 href={`/baca/${chap.slug}`}
-                className={`flex items-center justify-between px-4 py-3 rounded-xl border transition-all ${
-                  isRead
-                    ? 'bg-black/40 border-transparent text-[#71717a] hover:text-white hover:bg-[#131b26]'
-                    : 'bg-[#131b26]/50 border-white/[0.04] text-[#d4d4d8] hover:bg-[#131b26] hover:border-[#c1fbd4]/30 hover:text-white'
+                className={`flex items-center justify-between px-3.5 py-2.5 hover:bg-[#222222] transition-colors group ${
+                  isRead ? 'text-[#777777]' : 'text-white'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  {isRead ? (
-                    <CheckCircle2 className="w-4 h-4 text-[#c1fbd4] flex-shrink-0" />
-                  ) : (
-                    <div className="w-1.5 h-1.5 rounded-full bg-[#c1fbd4] flex-shrink-0" />
+                <div className="flex items-center gap-2.5 truncate max-w-[70%] sm:max-w-[80%]">
+                  <span
+                    className={`font-semibold text-xs sm:text-sm group-hover:text-[#00a2ff] transition-colors truncate ${
+                      isRead ? 'line-through text-[#666666]' : ''
+                    }`}
+                  >
+                    {chap.title}
+                  </span>
+                  {isRead && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-400 font-mono">
+                      Dibaca
+                    </span>
                   )}
-                  <span className="font-semibold text-xs sm:text-sm">{chap.title}</span>
                 </div>
-                <span className="text-[11px] text-[#71717a] font-mono">{chap.date}</span>
+
+                <div className="flex items-center gap-2 text-xs text-[#777777] flex-shrink-0">
+                  <span className="text-[11px]">{chap.date || 'Baru'}</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-[#555555] group-hover:text-[#00a2ff] transition-colors" />
+                </div>
               </Link>
             );
           })
         ) : (
-          <div className="text-center py-10 text-[#71717a] text-xs sm:text-sm">
-            Tidak ada chapter yang cocok dengan "{filterQuery}"
+          <div className="p-8 text-center text-xs text-[#777777]">
+            Tidak ada chapter yang cocok dengan pencarian "{search}".
           </div>
         )}
       </div>

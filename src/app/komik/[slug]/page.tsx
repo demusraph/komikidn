@@ -3,16 +3,18 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ComicDetail } from '@/lib/types';
+import { ComicDetail, ComicCardItem } from '@/lib/types';
 import ChapterList from '@/components/ChapterList';
 import BookmarkButton from './BookmarkButton';
-import { Sparkles, Layers, User, Tag, Calendar, CheckCircle, RefreshCw, BookOpen } from 'lucide-react';
+import SidebarPopular from '@/components/SidebarPopular';
+import { BookOpen, Star, Play, RefreshCw, Layers } from 'lucide-react';
 
 function ComicDetailContent() {
   const params = useParams();
   const slug = (params?.slug as string) || '';
 
   const [detail, setDetail] = useState<ComicDetail | null>(null);
+  const [popularComics, setPopularComics] = useState<ComicCardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -23,16 +25,24 @@ function ComicDetailContent() {
     setLoading(true);
     setError(null);
 
-    async function fetchDetail() {
+    async function fetchData() {
       try {
-        const res = await fetch(`/api/comics/${encodeURIComponent(slug)}`);
+        const [res, popRes] = await Promise.all([
+          fetch(`/api/comics/${encodeURIComponent(slug)}`),
+          fetch('/api/comics/latest?popular=true')
+        ]);
         const json = await res.json();
+        const popJson = await popRes.json();
         if (!isMounted) return;
 
         if (json.success && json.data) {
           setDetail(json.data);
         } else {
           setError(json.error || 'Komik tidak ditemukan atau gagal dimuat.');
+        }
+
+        if (popJson.success && Array.isArray(popJson.popular)) {
+          setPopularComics(popJson.popular);
         }
       } catch (err: any) {
         if (isMounted) setError(err.message);
@@ -41,7 +51,7 @@ function ComicDetailContent() {
       }
     }
 
-    fetchDetail();
+    fetchData();
     return () => {
       isMounted = false;
     };
@@ -49,45 +59,41 @@ function ComicDetailContent() {
 
   if (loading) {
     return (
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
-        <section className="bg-[#0a0e17] border border-white/[0.08] rounded-3xl p-6 sm:p-10 flex flex-col md:flex-row gap-8 lg:gap-12 animate-pulse">
-          <div className="w-full sm:w-72 aspect-[3/4] rounded-2xl bg-[#131b26] flex-shrink-0" />
-          <div className="flex-1 space-y-6">
-            <div className="h-4 w-32 bg-[#131b26] rounded-full" />
-            <div className="h-8 w-3/4 bg-[#131b26] rounded-full" />
-            <div className="flex gap-2">
-              <div className="h-6 w-16 bg-[#131b26] rounded-full" />
-              <div className="h-6 w-16 bg-[#131b26] rounded-full" />
-            </div>
-            <div className="h-20 bg-[#131b26] rounded-2xl" />
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+        <div className="bg-[#1c1c1c] border border-[#2d2d2d] rounded-lg p-6 animate-pulse flex flex-col md:flex-row gap-6">
+          <div className="w-48 sm:w-56 aspect-[3/4] bg-[#222222] rounded flex-shrink-0" />
+          <div className="flex-1 space-y-4">
+            <div className="h-6 w-3/4 bg-[#222222] rounded" />
+            <div className="h-4 w-1/2 bg-[#222222] rounded" />
+            <div className="h-24 bg-[#222222] rounded" />
           </div>
-        </section>
+        </div>
       </main>
     );
   }
 
   if (error || !detail) {
     return (
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center space-y-6">
-        <div className="w-16 h-16 rounded-full bg-[#131b26] flex items-center justify-center text-[#c1fbd4] mx-auto border border-white/10 shadow-lg">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-20 text-center space-y-6">
+        <div className="w-16 h-16 rounded bg-[#222222] flex items-center justify-center text-[#0084ff] mx-auto border border-[#333333]">
           <BookOpen className="w-8 h-8" />
         </div>
         <div className="space-y-2">
-          <h1 className="text-2xl sm:text-3xl font-light text-white font-display">Gagal Memuat Komik</h1>
-          <p className="text-xs sm:text-sm text-[#9dabad] max-w-md mx-auto">
+          <h1 className="text-xl sm:text-2xl font-bold text-white">Gagal Memuat Komik</h1>
+          <p className="text-xs sm:text-sm text-[#888888] max-w-md mx-auto">
             {error || 'Data komik tidak dapat ditemukan.'}
           </p>
         </div>
         <div className="flex items-center justify-center gap-3">
           <button
             onClick={() => window.location.reload()}
-            className="px-6 py-2.5 rounded-full bg-[#c1fbd4] text-black text-xs font-bold hover:bg-[#a8f7c1] inline-flex items-center gap-2"
+            className="px-5 py-2 rounded bg-[#0084ff] text-white text-xs font-bold hover:bg-[#0070db] inline-flex items-center gap-2"
           >
             <RefreshCw className="w-4 h-4" /> Coba Lagi
           </button>
           <Link
             href="/"
-            className="px-6 py-2.5 rounded-full bg-[#131b26] text-white text-xs font-semibold hover:bg-[#1b2636] border border-white/10"
+            className="px-5 py-2 rounded bg-[#222222] text-white text-xs font-semibold hover:bg-[#282828] border border-[#333333]"
           >
             Kembali ke Beranda
           </Link>
@@ -96,119 +102,159 @@ function ComicDetailContent() {
     );
   }
 
+  const firstChapter = detail.chapters[detail.chapters.length - 1];
+  const latestChapter = detail.chapters[0];
+
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
-      {/* Product Detail Banner (Shopify Dark Surface) */}
-      <section className="bg-[#0a0e17] border border-white/[0.08] rounded-3xl p-6 sm:p-10 flex flex-col md:flex-row gap-8 lg:gap-12 shadow-[0_20px_50px_rgba(0,0,0,0.8)] shopify-sheen">
-        {/* Cover Photo Frame */}
-        <div className="w-full sm:w-72 flex-shrink-0 mx-auto md:mx-0">
-          <div className="aspect-[3/4] rounded-2xl overflow-hidden bg-[#131b26] shadow-2xl border border-white/10 relative group">
-            {detail.thumbnail ? (
-              <img
-                src={detail.thumbnail}
-                alt={detail.title}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-[#71717a] text-sm">
-                No Cover
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column (8 cols): Info + Chapters */}
+        <div className="lg:col-span-8 space-y-6">
+          {/* Komikindo Detail Info Card */}
+          <div className="bg-[#1c1c1c] border border-[#2d2d2d] rounded-lg p-4 sm:p-6 space-y-6">
+            <div className="flex flex-col sm:flex-row gap-6">
+              {/* Cover Art */}
+              <div className="w-48 sm:w-56 mx-auto sm:mx-0 flex-shrink-0">
+                <div className="aspect-[3/4] rounded overflow-hidden bg-[#222222] border border-[#383838] shadow-lg relative">
+                  {detail.thumbnail ? (
+                    <img
+                      src={detail.thumbnail}
+                      alt={detail.title}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-500 text-xs">No Cover</div>
+                  )}
+                  {/* Status Badge */}
+                  {detail.metadata['status'] && (
+                    <div className="absolute top-2 left-2 bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow">
+                      {detail.metadata['status']}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Info Column */}
+              <div className="flex-1 space-y-3">
+                <h1 className="text-xl sm:text-2xl font-bold text-white leading-tight">
+                  {detail.title}
+                </h1>
+
+                {detail.metadata['judul alternatif'] && (
+                  <p className="text-xs text-[#aaaaaa]">
+                    <span className="text-[#666666]">Alias:</span> {detail.metadata['judul alternatif']}
+                  </p>
+                )}
+
+                {/* Metadata Table (Komikindo Style) */}
+                <div className="text-xs border border-[#2d2d2d] rounded overflow-hidden bg-[#181818] divide-y divide-[#262626]">
+                  {detail.metadata['pengarang'] && (
+                    <div className="flex px-3 py-1.5">
+                      <span className="w-32 text-[#777777]">Pengarang</span>
+                      <span className="flex-1 text-white font-medium">{detail.metadata['pengarang']}</span>
+                    </div>
+                  )}
+                  {detail.metadata['ilustrator'] && (
+                    <div className="flex px-3 py-1.5">
+                      <span className="w-32 text-[#777777]">Ilustrator</span>
+                      <span className="flex-1 text-white font-medium">{detail.metadata['ilustrator']}</span>
+                    </div>
+                  )}
+                  {detail.metadata['jenis komik'] && (
+                    <div className="flex px-3 py-1.5">
+                      <span className="w-32 text-[#777777]">Jenis Komik</span>
+                      <span className="flex-1 text-[#00a2ff] font-medium">{detail.metadata['jenis komik']}</span>
+                    </div>
+                  )}
+                  {detail.metadata['tema'] && (
+                    <div className="flex px-3 py-1.5">
+                      <span className="w-32 text-[#777777]">Tema</span>
+                      <span className="flex-1 text-white font-medium">{detail.metadata['tema']}</span>
+                    </div>
+                  )}
+                  <div className="flex px-3 py-1.5">
+                    <span className="w-32 text-[#777777]">Total Chapter</span>
+                    <span className="flex-1 text-emerald-400 font-bold font-mono">{detail.totalChapters} Chapter</span>
+                  </div>
+                </div>
+
+                {/* Genre Tags */}
+                {detail.genres.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {detail.genres.map((g) => (
+                      <Link
+                        key={g.slug}
+                        href={`/genres/${g.slug}`}
+                        className="px-2.5 py-1 rounded bg-[#242424] hover:bg-[#0084ff] text-xs text-[#cccccc] hover:text-white border border-[#333333] transition-colors"
+                      >
+                        {g.name}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="pt-2 flex flex-wrap items-center gap-2.5">
+                  {firstChapter && (
+                    <Link
+                      href={`/baca/${firstChapter.slug}`}
+                      className="px-4 py-2.5 rounded bg-[#0084ff] hover:bg-[#0070db] text-xs font-bold text-white transition-colors shadow flex items-center gap-1.5"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-current" /> Baca Awal
+                    </Link>
+                  )}
+                  {latestChapter && (
+                    <Link
+                      href={`/baca/${latestChapter.slug}`}
+                      className="px-4 py-2.5 rounded bg-[#2a2a2a] hover:bg-[#333333] text-xs font-semibold text-white border border-[#383838] transition-colors"
+                    >
+                      Baca Terbaru
+                    </Link>
+                  )}
+                  <BookmarkButton
+                    comic={{
+                      slug: detail.slug,
+                      title: detail.title,
+                      thumbnail: detail.thumbnail,
+                      type: (detail.metadata['jenis komik'] as any) || 'Unknown',
+                      lastReadAt: Date.now(),
+                      addedAt: Date.now()
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Synopsis Box */}
+            {detail.synopsis && (
+              <div className="space-y-2 pt-4 border-t border-[#2d2d2d]">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Layers className="w-4 h-4 text-[#0084ff]" />
+                  Sinopsis {detail.title}
+                </h3>
+                <p className="text-xs sm:text-sm text-[#bbbbbb] leading-relaxed">
+                  {detail.synopsis}
+                </p>
               </div>
             )}
-            <div className="absolute inset-0 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)] pointer-events-none" />
           </div>
+
+          {/* Chapter List Component */}
+          <ChapterList comicSlug={detail.slug} chapters={detail.chapters} />
         </div>
 
-        {/* Info Column */}
-        <div className="flex-1 flex flex-col justify-between space-y-6">
-          <div className="space-y-3">
-            <span className="text-[11px] font-mono text-[#c1fbd4] uppercase tracking-wider block font-semibold">
-              Comic Catalog ID &bull; {detail.slug}
-            </span>
-
-            {/* Thin Display Title */}
-            <h1 className="text-2xl sm:text-4xl font-light text-white tracking-tight leading-tight font-display">
-              {detail.title}
-            </h1>
-
-            {detail.metadata['judul alternatif'] && (
-              <p className="text-xs sm:text-sm text-[#9dabad] font-normal leading-relaxed">
-                <span className="font-semibold text-white/90">Alias:</span> {detail.metadata['judul alternatif']}
-              </p>
-            )}
-
-            {/* Shopify Genre Pills */}
-            {detail.genres.length > 0 && (
-              <div className="flex flex-wrap gap-2 pt-2">
-                {detail.genres.map((g) => (
-                  <Link
-                    key={g.slug}
-                    href={`/genres/${g.slug}`}
-                    className="px-3.5 py-1 rounded-full bg-[#131b26] text-[#c1fbd4] text-xs font-semibold border border-[#c1fbd4]/20 hover:border-[#c1fbd4]/60 hover:bg-[#1b2636] transition-all"
-                  >
-                    {g.name}
-                  </Link>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Metadata Grid with Hairline Dividers */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 py-4 border-y border-white/[0.08] text-xs">
-            {detail.metadata['status'] && (
-              <div>
-                <span className="text-[#71717a] block uppercase text-[10px] tracking-wider font-semibold">Status</span>
-                <span className="font-semibold text-white text-sm mt-0.5 block">{detail.metadata['status']}</span>
-              </div>
-            )}
-            {detail.metadata['pengarang'] && (
-              <div>
-                <span className="text-[#71717a] block uppercase text-[10px] tracking-wider font-semibold">Pengarang</span>
-                <span className="font-semibold text-white text-sm mt-0.5 block truncate">{detail.metadata['pengarang']}</span>
-              </div>
-            )}
-            <div>
-              <span className="text-[#71717a] block uppercase text-[10px] tracking-wider font-semibold">Total Chapter</span>
-              <span className="font-bold text-[#c1fbd4] text-sm mt-0.5 block font-mono">{detail.totalChapters} Chapter</span>
-            </div>
-          </div>
-
-          {/* Synopsis */}
-          {detail.synopsis && (
-            <div className="space-y-2">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-[#9dabad]">Sinopsis</h3>
-              <p className="text-xs sm:text-sm text-[#d4d4d8] leading-relaxed max-h-40 overflow-y-auto pr-2 custom-scrollbar font-normal">
-                {detail.synopsis}
-              </p>
-            </div>
-          )}
-
-          {/* Action CTAs */}
-          <div className="pt-2 flex items-center gap-4">
-            <BookmarkButton
-              comic={{
-                slug: detail.slug,
-                title: detail.title,
-                thumbnail: detail.thumbnail,
-                type: 'Unknown',
-                lastReadAt: Date.now(),
-                addedAt: Date.now()
-              }}
-            />
-          </div>
+        {/* Right Column (4 cols): Sidebar */}
+        <div className="lg:col-span-4">
+          <SidebarPopular popularComics={popularComics} />
         </div>
-      </section>
-
-      {/* Chapter List Section */}
-      <section>
-        <ChapterList comicSlug={detail.slug} chapters={detail.chapters} />
-      </section>
+      </div>
     </main>
   );
 }
 
 export default function ComicDetailPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#000000]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-[#161616]" />}>
       <ComicDetailContent />
     </Suspense>
   );

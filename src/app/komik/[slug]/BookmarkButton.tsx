@@ -45,19 +45,19 @@ export default function BookmarkButton({ comic }: BookmarkButtonProps) {
   return (
     <button
       onClick={toggleBookmark}
-      className={`flex items-center gap-2 px-6 py-3 rounded-full font-bold text-xs sm:text-sm tracking-wide transition-all duration-300 shadow-xl ${
+      className={`flex items-center justify-center gap-2 px-5 py-2.5 rounded font-semibold text-xs transition-colors shadow ${
         isBookmarked
-          ? 'bg-[#131b26] hover:bg-[#1b2636] text-[#c1fbd4] border border-[#c1fbd4]/40 shadow-[0_0_20px_rgba(193,251,212,0.15)]'
-          : 'bg-[#c1fbd4] hover:bg-[#a8f7c1] text-black shadow-lg shadow-[#c1fbd4]/20'
+          ? 'bg-[#2a2a2a] hover:bg-[#333333] text-emerald-400 border border-emerald-500/30'
+          : 'bg-[#0084ff] hover:bg-[#0070db] text-white'
       }`}
     >
       {isBookmarked ? (
         <>
-          <BookmarkCheck className="w-4 h-4 text-[#c1fbd4]" /> Tersimpan di Koleksi
+          <BookmarkCheck className="w-4 h-4 text-emerald-400" /> Tersimpan di Koleksi
         </>
       ) : (
         <>
-          <Bookmark className="w-4 h-4 text-black" /> Simpan ke Koleksi
+          <Bookmark className="w-4 h-4 text-white" /> + Tambah ke Koleksi
         </>
       )}
     </button>

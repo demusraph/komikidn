@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { ComicCardItem } from '@/lib/types';
 import ComicCard from '@/components/ComicCard';
-import { Layers, ChevronRight, ChevronLeft, BookOpen } from 'lucide-react';
+import SidebarPopular from '@/components/SidebarPopular';
+import { Layers, ChevronRight, ChevronLeft, BookOpen, RefreshCw } from 'lucide-react';
 
 function CategoryContent() {
   const params = useParams();
@@ -18,7 +19,7 @@ function CategoryContent() {
   const validCategories: Record<string, { title: string; subtitle: string; flag: string }> = {
     manhwa: {
       title: 'Daftar Komik Manhwa',
-      subtitle: 'Koleksi komik Korea Selatan format webtoon full-color',
+      subtitle: 'Koleksi komik Korea format webtoon full-color',
       flag: 'Manhwa'
     },
     manga: {
@@ -28,7 +29,7 @@ function CategoryContent() {
     },
     manhua: {
       title: 'Daftar Komik Manhua',
-      subtitle: 'Koleksi komik China/Tiongkok tema martial arts dan cultivation',
+      subtitle: 'Koleksi komik China tema martial arts dan cultivation',
       flag: 'Manhua'
     },
     'daftar-manga': {
@@ -45,6 +46,7 @@ function CategoryContent() {
   };
 
   const [comics, setComics] = useState<ComicCardItem[]>([]);
+  const [popularComics, setPopularComics] = useState<ComicCardItem[]>([]);
   const [hasNextPage, setHasNextPage] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,8 +58,12 @@ function CategoryContent() {
 
     async function loadData() {
       try {
-        const catRes = await fetch(`/api/comics/latest?category=${encodeURIComponent(cleanType)}&page=${currentPage}`);
+        const [catRes, popRes] = await Promise.all([
+          fetch(`/api/comics/latest?category=${encodeURIComponent(cleanType)}&page=${currentPage}`),
+          fetch('/api/comics/latest?popular=true')
+        ]);
         const json = await catRes.json();
+        const popJson = await popRes.json();
         if (!isMounted) return;
 
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
@@ -65,6 +71,10 @@ function CategoryContent() {
           setHasNextPage(json.hasNextPage ?? true);
         } else {
           setError(json.error || 'Gagal memuat komik kategori.');
+        }
+
+        if (popJson.success && Array.isArray(popJson.popular)) {
+          setPopularComics(popJson.popular);
         }
       } catch (err: any) {
         if (isMounted) setError(err.message);
@@ -80,123 +90,110 @@ function CategoryContent() {
   }, [cleanType, currentPage]);
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Category Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 border-b border-white/[0.08] pb-6">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-mono text-[#c1fbd4] uppercase tracking-wider block font-semibold">
-              Category Archive &bull; {catMeta.flag}
-            </span>
-            <span className="text-[10px] font-mono text-[#71717a] px-2 py-0.5 rounded-full bg-[#131b26] border border-white/5">
-              Halaman {currentPage}
-            </span>
-          </div>
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column (8 cols): Category Grid */}
+        <div className="lg:col-span-8 space-y-6">
+          <div className="bg-[#1c1c1c] border border-[#2d2d2d] rounded-lg p-4 sm:p-5 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#2d2d2d] pb-3">
+              <div>
+                <h1 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                  <Layers className="w-5 h-5 text-[#0084ff]" />
+                  {catMeta.title}
+                </h1>
+                <p className="text-xs text-[#888888] mt-0.5">
+                  {catMeta.subtitle} &bull; Menampilkan <span className="text-white font-medium">{comics.length}</span> judul
+                </p>
+              </div>
 
-          <h1 className="text-2xl sm:text-4xl font-light text-white flex items-center gap-3 font-display tracking-tight">
-            <Layers className="w-7 h-7 text-[#c1fbd4]" />
-            {catMeta.title}
-          </h1>
-          <p className="text-xs sm:text-sm text-[#9dabad]">
-            {catMeta.subtitle} &bull; Menampilkan <span className="text-white font-semibold">{comics.length}</span> judul
-          </p>
+              <div className="flex items-center gap-1.5 text-xs">
+                <Link
+                  href="/kategori/manhwa"
+                  className={`px-3 py-1 rounded transition-colors ${
+                    cleanType === 'manhwa' ? 'bg-[#0084ff] text-white font-semibold' : 'bg-[#252525] text-[#cccccc] hover:bg-[#333333]'
+                  }`}
+                >
+                  Manhwa
+                </Link>
+                <Link
+                  href="/kategori/manga"
+                  className={`px-3 py-1 rounded transition-colors ${
+                    cleanType === 'manga' ? 'bg-[#0084ff] text-white font-semibold' : 'bg-[#252525] text-[#cccccc] hover:bg-[#333333]'
+                  }`}
+                >
+                  Manga
+                </Link>
+                <Link
+                  href="/kategori/manhua"
+                  className={`px-3 py-1 rounded transition-colors ${
+                    cleanType === 'manhua' ? 'bg-[#0084ff] text-white font-semibold' : 'bg-[#252525] text-[#cccccc] hover:bg-[#333333]'
+                  }`}
+                >
+                  Manhua
+                </Link>
+              </div>
+            </div>
+
+            {/* Grid */}
+            {loading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <div key={i} className="aspect-[3/4] rounded bg-[#222222] border border-[#2d2d2d] animate-pulse" />
+                ))}
+              </div>
+            ) : comics.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3.5">
+                {comics.map((comic) => (
+                  <ComicCard key={comic.slug} comic={comic} />
+                ))}
+              </div>
+            ) : (
+              <div className="py-16 text-center space-y-3">
+                <p className="text-sm text-gray-400">{error || 'Tidak ada komik di halaman ini.'}</p>
+              </div>
+            )}
+
+            {/* Pagination Controls */}
+            {!loading && comics.length > 0 && (
+              <div className="flex items-center justify-center gap-2 pt-6 border-t border-[#2d2d2d]">
+                {currentPage > 1 && (
+                  <Link
+                    href={`/kategori/${cleanType}?page=${currentPage - 1}`}
+                    className="flex items-center gap-1 px-4 py-2 rounded bg-[#252525] hover:bg-[#333333] border border-[#383838] text-xs font-semibold text-white transition-colors"
+                  >
+                    <ChevronLeft className="w-4 h-4" /> Prev
+                  </Link>
+                )}
+
+                <span className="px-3.5 py-2 rounded bg-[#0084ff] text-xs font-bold text-white">
+                  {currentPage}
+                </span>
+
+                {hasNextPage && (
+                  <Link
+                    href={`/kategori/${cleanType}?page=${currentPage + 1}`}
+                    className="flex items-center gap-1 px-5 py-2 rounded bg-[#0084ff] hover:bg-[#0070db] text-xs font-bold text-white transition-colors shadow"
+                  >
+                    Next <ChevronRight className="w-4 h-4" />
+                  </Link>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Quick Category Switcher Pills */}
-        <div className="flex flex-wrap items-center gap-2 self-start">
-          <Link
-            href="/kategori/manhwa"
-            className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${
-              cleanType === 'manhwa'
-                ? 'bg-[#c1fbd4] text-black shadow-lg shadow-[#c1fbd4]/20'
-                : 'bg-[#131b26] text-[#d4d4d8] hover:text-white border border-white/10 hover:border-white/20'
-            }`}
-          >
-            Manhwa
-          </Link>
-          <Link
-            href="/kategori/manga"
-            className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${
-              cleanType === 'manga'
-                ? 'bg-[#c1fbd4] text-black shadow-lg shadow-[#c1fbd4]/20'
-                : 'bg-[#131b26] text-[#d4d4d8] hover:text-white border border-white/10 hover:border-white/20'
-            }`}
-          >
-            Manga
-          </Link>
-          <Link
-            href="/kategori/manhua"
-            className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${
-              cleanType === 'manhua'
-                ? 'bg-[#c1fbd4] text-black shadow-lg shadow-[#c1fbd4]/20'
-                : 'bg-[#131b26] text-[#d4d4d8] hover:text-white border border-white/10 hover:border-white/20'
-            }`}
-          >
-            Manhua
-          </Link>
+        {/* Right Column (4 cols): Sidebar */}
+        <div className="lg:col-span-4">
+          <SidebarPopular popularComics={popularComics} />
         </div>
       </div>
-
-      {/* Comics Grid */}
-      {loading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5 sm:gap-5">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <div key={i} className="aspect-[3/4] rounded-2xl bg-[#0a0e17] border border-white/5 animate-pulse" />
-          ))}
-        </div>
-      ) : comics.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5 sm:gap-5">
-          {comics.map((comic) => (
-            <ComicCard key={comic.slug} comic={comic} />
-          ))}
-        </div>
-      ) : (
-        <div className="py-24 text-center space-y-4 bg-[#0a0e17] border border-white/[0.08] rounded-3xl p-8 shopify-sheen">
-          <div className="w-16 h-16 rounded-full bg-[#131b26] flex items-center justify-center text-[#9dabad] mx-auto border border-white/10">
-            <BookOpen className="w-7 h-7" />
-          </div>
-          <div className="space-y-1">
-            <p className="text-white font-semibold text-base sm:text-lg font-display">Belum Ada Komik di Halaman Ini</p>
-            <p className="text-[#71717a] text-xs max-w-md mx-auto">
-              Silakan kembali ke halaman sebelumnya.
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* Pagination Controls */}
-      {!loading && comics.length > 0 && (
-        <div className="flex items-center justify-center gap-3 pt-8 pb-4">
-          {currentPage > 1 && (
-            <Link
-              href={`/kategori/${cleanType}?page=${currentPage - 1}`}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#131b26] hover:bg-[#1b2636] border border-white/10 text-xs font-semibold text-white transition-all shadow-sm"
-            >
-              <ChevronLeft className="w-4 h-4" /> Sebelumnya
-            </Link>
-          )}
-
-          <span className="px-4 py-2 rounded-full bg-[#c1fbd4]/10 border border-[#c1fbd4]/30 text-xs font-bold text-[#c1fbd4] font-mono">
-            {currentPage}
-          </span>
-
-          {hasNextPage && (
-            <Link
-              href={`/kategori/${cleanType}?page=${currentPage + 1}`}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#c1fbd4] hover:bg-[#a8f7c1] text-xs font-bold text-black shadow-lg shadow-[#c1fbd4]/15 transition-all"
-            >
-              Selanjutnya <ChevronRight className="w-4 h-4" />
-            </Link>
-          )}
-        </div>
-      )}
     </main>
   );
 }
 
 export default function CategoryPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#000000]" />}>
+    <Suspense fallback={<div className="min-h-screen bg-[#161616]" />}>
       <CategoryContent />
     </Suspense>
   );
