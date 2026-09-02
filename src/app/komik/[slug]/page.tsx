@@ -1,29 +1,99 @@
-import React from 'react';
+'use client';
+
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import { getComicDetail } from '@/lib/scraper';
+import { useParams } from 'next/navigation';
+import { ComicDetail } from '@/lib/types';
 import ChapterList from '@/components/ChapterList';
 import BookmarkButton from './BookmarkButton';
-import { Sparkles, Layers, User, Tag, Calendar, CheckCircle } from 'lucide-react';
+import { Sparkles, Layers, User, Tag, Calendar, CheckCircle, RefreshCw, BookOpen } from 'lucide-react';
 
-interface ComicDetailPageProps {
-  params: Promise<{ slug: string }>;
-}
+function ComicDetailContent() {
+  const params = useParams();
+  const slug = (params?.slug as string) || '';
 
-export const revalidate = 600; // 10 minutes cache
+  const [detail, setDetail] = useState<ComicDetail | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-export default async function ComicDetailPage({ params }: ComicDetailPageProps) {
-  const { slug } = await params;
+  useEffect(() => {
+    let isMounted = true;
+    if (!slug) return;
 
-  let detail;
-  try {
-    detail = await getComicDetail(slug);
-  } catch (err) {
-    notFound();
+    setLoading(true);
+    setError(null);
+
+    async function fetchDetail() {
+      try {
+        const res = await fetch(`/api/comics/${encodeURIComponent(slug)}`);
+        const json = await res.json();
+        if (!isMounted) return;
+
+        if (json.success && json.data) {
+          setDetail(json.data);
+        } else {
+          setError(json.error || 'Komik tidak ditemukan atau gagal dimuat.');
+        }
+      } catch (err: any) {
+        if (isMounted) setError(err.message);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    fetchDetail();
+    return () => {
+      isMounted = false;
+    };
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-10">
+        <section className="bg-[#0a0e17] border border-white/[0.08] rounded-3xl p-6 sm:p-10 flex flex-col md:flex-row gap-8 lg:gap-12 animate-pulse">
+          <div className="w-full sm:w-72 aspect-[3/4] rounded-2xl bg-[#131b26] flex-shrink-0" />
+          <div className="flex-1 space-y-6">
+            <div className="h-4 w-32 bg-[#131b26] rounded-full" />
+            <div className="h-8 w-3/4 bg-[#131b26] rounded-full" />
+            <div className="flex gap-2">
+              <div className="h-6 w-16 bg-[#131b26] rounded-full" />
+              <div className="h-6 w-16 bg-[#131b26] rounded-full" />
+            </div>
+            <div className="h-20 bg-[#131b26] rounded-2xl" />
+          </div>
+        </section>
+      </main>
+    );
   }
 
-  if (!detail || !detail.title) {
-    notFound();
+  if (error || !detail) {
+    return (
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center space-y-6">
+        <div className="w-16 h-16 rounded-full bg-[#131b26] flex items-center justify-center text-[#c1fbd4] mx-auto border border-white/10 shadow-lg">
+          <BookOpen className="w-8 h-8" />
+        </div>
+        <div className="space-y-2">
+          <h1 className="text-2xl sm:text-3xl font-light text-white font-display">Gagal Memuat Komik</h1>
+          <p className="text-xs sm:text-sm text-[#9dabad] max-w-md mx-auto">
+            {error || 'Data komik tidak dapat ditemukan.'}
+          </p>
+        </div>
+        <div className="flex items-center justify-center gap-3">
+          <button
+            onClick={() => window.location.reload()}
+            className="px-6 py-2.5 rounded-full bg-[#c1fbd4] text-black text-xs font-bold hover:bg-[#a8f7c1] inline-flex items-center gap-2"
+          >
+            <RefreshCw className="w-4 h-4" /> Coba Lagi
+          </button>
+          <Link
+            href="/"
+            className="px-6 py-2.5 rounded-full bg-[#131b26] text-white text-xs font-semibold hover:bg-[#1b2636] border border-white/10"
+          >
+            Kembali ke Beranda
+          </Link>
+        </div>
+      </main>
+    );
   }
 
   return (
@@ -133,5 +203,13 @@ export default async function ComicDetailPage({ params }: ComicDetailPageProps) 
         <ChapterList comicSlug={detail.slug} chapters={detail.chapters} />
       </section>
     </main>
+  );
+}
+
+export default function ComicDetailPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#000000]" />}>
+      <ComicDetailContent />
+    </Suspense>
   );
 }

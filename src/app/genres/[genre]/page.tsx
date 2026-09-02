@@ -1,32 +1,58 @@
-import React from 'react';
+'use client';
+
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
-import { getComicsByGenre } from '@/lib/scraper';
+import { useParams, useSearchParams } from 'next/navigation';
+import { ComicCardItem } from '@/lib/types';
 import ComicCard from '@/components/ComicCard';
-import { Tag, ChevronRight, ChevronLeft, BookOpen } from 'lucide-react';
+import { Tag, ChevronRight, ChevronLeft, BookOpen, RefreshCw } from 'lucide-react';
 
-interface GenrePageProps {
-  params: Promise<{ genre: string }>;
-  searchParams: Promise<{ page?: string }>;
-}
-
-export const revalidate = 180; // 3 minutes cache
-
-export default async function GenrePage({ params, searchParams }: GenrePageProps) {
-  const { genre } = await params;
-  const { page: pageStr } = await searchParams;
+function GenreContent() {
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const genre = (params?.genre as string) || '';
+  const pageStr = searchParams.get('page');
   const currentPage = parseInt(pageStr || '1', 10);
 
   const cleanGenre = genre.toLowerCase().trim();
-
-  let resData;
-  try {
-    resData = await getComicsByGenre(cleanGenre, currentPage);
-  } catch (err) {
-    notFound();
-  }
-
   const genreName = cleanGenre.replace(/-/g, ' ').toUpperCase();
+
+  const [comics, setComics] = useState<ComicCardItem[]>([]);
+  const [hasNextPage, setHasNextPage] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!cleanGenre) return;
+
+    setLoading(true);
+    setError(null);
+
+    async function fetchGenre() {
+      try {
+        const res = await fetch(`/api/comics/search?q=${encodeURIComponent(cleanGenre)}&page=${currentPage}`);
+        const json = await res.json();
+        if (!isMounted) return;
+
+        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
+          setComics(json.data);
+          setHasNextPage(json.hasNextPage ?? true);
+        } else {
+          setError(json.error || 'Tidak ada komik untuk genre ini.');
+        }
+      } catch (err: any) {
+        if (isMounted) setError(err.message);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    fetchGenre();
+    return () => {
+      isMounted = false;
+    };
+  }, [cleanGenre, currentPage]);
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -41,15 +67,21 @@ export default async function GenrePage({ params, searchParams }: GenrePageProps
             Genre: {genreName}
           </h1>
           <p className="text-xs sm:text-sm text-[#9dabad]">
-            Menampilkan <span className="text-white font-semibold">{resData.data.length}</span> judul komik genre {genreName}
+            Menampilkan <span className="text-white font-semibold">{comics.length}</span> judul komik
           </p>
         </div>
       </div>
 
       {/* Comics Grid */}
-      {resData.data.length > 0 ? (
+      {loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5 sm:gap-5">
-          {resData.data.map((comic) => (
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div key={i} className="aspect-[3/4] rounded-2xl bg-[#0a0e17] border border-white/5 animate-pulse" />
+          ))}
+        </div>
+      ) : comics.length > 0 ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5 sm:gap-5">
+          {comics.map((comic) => (
             <ComicCard key={comic.slug} comic={comic} />
           ))}
         </div>
@@ -68,29 +100,39 @@ export default async function GenrePage({ params, searchParams }: GenrePageProps
       )}
 
       {/* Pagination Controls */}
-      <div className="flex items-center justify-center gap-3 pt-8 pb-4">
-        {currentPage > 1 && (
-          <Link
-            href={`/genres/${cleanGenre}?page=${currentPage - 1}`}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#131b26] hover:bg-[#1b2636] border border-white/10 text-xs font-semibold text-white transition-all shadow-sm"
-          >
-            <ChevronLeft className="w-4 h-4" /> Sebelumnya
-          </Link>
-        )}
+      {!loading && comics.length > 0 && (
+        <div className="flex items-center justify-center gap-3 pt-8 pb-4">
+          {currentPage > 1 && (
+            <Link
+              href={`/genres/${cleanGenre}?page=${currentPage - 1}`}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#131b26] hover:bg-[#1b2636] border border-white/10 text-xs font-semibold text-white transition-all shadow-sm"
+            >
+              <ChevronLeft className="w-4 h-4" /> Sebelumnya
+            </Link>
+          )}
 
-        <span className="px-4 py-2 rounded-full bg-[#c1fbd4]/10 border border-[#c1fbd4]/30 text-xs font-bold text-[#c1fbd4] font-mono">
-          {currentPage}
-        </span>
+          <span className="px-4 py-2 rounded-full bg-[#c1fbd4]/10 border border-[#c1fbd4]/30 text-xs font-bold text-[#c1fbd4] font-mono">
+            {currentPage}
+          </span>
 
-        {resData.hasNextPage && (
-          <Link
-            href={`/genres/${cleanGenre}?page=${currentPage + 1}`}
-            className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#c1fbd4] hover:bg-[#a8f7c1] text-xs font-bold text-black shadow-lg shadow-[#c1fbd4]/15 transition-all"
-          >
-            Selanjutnya <ChevronRight className="w-4 h-4" />
-          </Link>
-        )}
-      </div>
+          {hasNextPage && (
+            <Link
+              href={`/genres/${cleanGenre}?page=${currentPage + 1}`}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-full bg-[#c1fbd4] hover:bg-[#a8f7c1] text-xs font-bold text-black shadow-lg shadow-[#c1fbd4]/15 transition-all"
+            >
+              Selanjutnya <ChevronRight className="w-4 h-4" />
+            </Link>
+          )}
+        </div>
+      )}
     </main>
+  );
+}
+
+export default function GenrePage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#000000]" />}>
+      <GenreContent />
+    </Suspense>
   );
 }

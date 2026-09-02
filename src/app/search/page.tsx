@@ -1,31 +1,71 @@
-import React from 'react';
-import { searchComics, getPopularComics } from '@/lib/scraper';
+'use client';
+
+import React, { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { ComicCardItem } from '@/lib/types';
 import ComicCard from '@/components/ComicCard';
-import { Search, Sparkles } from 'lucide-react';
+import { Search, BookOpen, RefreshCw } from 'lucide-react';
 
-interface SearchPageProps {
-  searchParams: Promise<{ q?: string; type?: string; sort?: string; page?: string }>;
-}
+function SearchContent() {
+  const searchParams = useSearchParams();
+  const q = searchParams.get('q') || '';
+  const type = searchParams.get('type') || '';
+  const sort = searchParams.get('sort') || '';
+  const pageStr = searchParams.get('page');
+  const currentPage = parseInt(pageStr || '1', 10);
 
-export default async function SearchPage({ searchParams }: SearchPageProps) {
-  const { q = '', type = '', sort = '', page = '1' } = await searchParams;
-  const currentPage = parseInt(page, 10);
+  const [results, setResults] = useState<ComicCardItem[]>([]);
+  const [title, setTitle] = useState('Pencarian Komik');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  let results: any[] = [];
-  let title = 'Pencarian Komik';
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+    setError(null);
 
-  if (sort === 'popular') {
-    results = await getPopularComics();
-    title = 'Komik Populer (Trending)';
-  } else if (type) {
-    const searchRes = await searchComics(type, currentPage);
-    results = searchRes.data;
-    title = `Koleksi Komik: ${type}`;
-  } else if (q.trim()) {
-    const searchRes = await searchComics(q, currentPage);
-    results = searchRes.data;
-    title = `Hasil Pencarian: "${q}"`;
-  }
+    async function fetchSearch() {
+      try {
+        let fetchUrl = '';
+        if (sort === 'popular') {
+          fetchUrl = '/api/comics/latest?popular=true';
+          setTitle('Komik Populer (Trending)');
+        } else if (type) {
+          fetchUrl = `/api/comics/latest?category=${encodeURIComponent(type)}&page=${currentPage}`;
+          setTitle(`Koleksi Komik: ${type}`);
+        } else if (q.trim()) {
+          fetchUrl = `/api/comics/search?q=${encodeURIComponent(q)}&page=${currentPage}`;
+          setTitle(`Hasil Pencarian: "${q}"`);
+        } else {
+          fetchUrl = `/api/comics/latest?page=${currentPage}`;
+          setTitle('Katalog Komik');
+        }
+
+        const res = await fetch(fetchUrl);
+        const json = await res.json();
+        if (!isMounted) return;
+
+        if (json.success) {
+          if (sort === 'popular' && json.popular) {
+            setResults(json.popular);
+          } else if (Array.isArray(json.data)) {
+            setResults(json.data);
+          }
+        } else {
+          setError(json.error || 'Pencarian tidak menemukan hasil.');
+        }
+      } catch (err: any) {
+        if (isMounted) setError(err.message);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    }
+
+    fetchSearch();
+    return () => {
+      isMounted = false;
+    };
+  }, [q, type, sort, currentPage]);
 
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -45,7 +85,13 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </div>
       </div>
 
-      {results.length > 0 ? (
+      {loading ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5 sm:gap-5">
+          {Array.from({ length: 12 }).map((_, i) => (
+            <div key={i} className="aspect-[3/4] rounded-2xl bg-[#0a0e17] border border-white/5 animate-pulse" />
+          ))}
+        </div>
+      ) : results.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3.5 sm:gap-5">
           {results.map((comic) => (
             <ComicCard key={comic.slug} comic={comic} />
@@ -54,7 +100,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       ) : (
         <div className="py-24 text-center space-y-4 bg-[#0a0e17] border border-white/[0.08] rounded-3xl p-8 shopify-sheen">
           <div className="w-16 h-16 rounded-full bg-[#131b26] flex items-center justify-center text-[#9dabad] mx-auto border border-white/10">
-            <Search className="w-7 h-7" />
+            <BookOpen className="w-7 h-7" />
           </div>
           <div className="space-y-1">
             <p className="text-white font-semibold text-base sm:text-lg font-display">Tidak Ada Komik Ditemukan</p>
@@ -65,5 +111,13 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
         </div>
       )}
     </main>
+  );
+}
+
+export default function SearchPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#000000]" />}>
+      <SearchContent />
+    </Suspense>
   );
 }
