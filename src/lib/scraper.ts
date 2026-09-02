@@ -1,4 +1,4 @@
-import { ComicCardItem, ComicDetail, ChapterData, Genre, ComicType } from './types';
+import { ComicCardItem, ComicDetail, ChapterData, Genre, ComicType, FeaturedSliderItem } from './types';
 
 const BASE_HOSTS = ['https://komikindo.ch', 'https://komikindo.org'];
 
@@ -177,6 +177,51 @@ export async function getPopularComics(): Promise<ComicCardItem[]> {
 
   setInCache(cacheKey, cards, 15 * 60 * 1000); // 15 mins cache
   return cards;
+}
+
+/**
+ * 4.5 Ambil Data BigSlider Komik Populer dari Homepage
+ */
+export async function getFeaturedSlider(): Promise<FeaturedSliderItem[]> {
+  const cacheKey = 'featured_slider';
+  const cached = getFromCache<FeaturedSliderItem[]>(cacheKey);
+  if (cached) return cached;
+
+  const html = await fetchHtml('/');
+  const sliderRegex = /<div class="bigcover">([\s\S]*?)<div class="slidshad"><\/div>\s*<\/div>\s*<\/div>/gi;
+  const items: FeaturedSliderItem[] = [];
+  let m;
+  while ((m = sliderRegex.exec(html)) !== null) {
+    const block = m[1];
+    const titleMatch = block.match(/<h2>\s*([\s\S]*?)\s*<\/h2>/i);
+    const linkMatch = block.match(/href="https?:\/\/[^\/]+\/komik\/([^\/"]+)\/?"/i);
+    const imgMatch = block.match(/<img[^>]+src="([^"]+)"/i);
+    const synMatch = block.match(/<div class="ttls">\s*([\s\S]*?)\s*<\/div>/i);
+    const genMatch = block.match(/<span><b>Genres<\/b>\s*([\s\S]*?)\s*<\/span>/i);
+    const ilusMatch = block.match(/<span><b>Ilustrator<\/b>\s*([\s\S]*?)\s*<\/span>/i);
+    const pengMatch = block.match(/<span><b>Pengarang<\/b>\s*([\s\S]*?)\s*<\/span>/i);
+    const statMatch = block.match(/<span><b>Status<\/b>\s*([\s\S]*?)\s*<\/span>/i);
+    const skorMatch = block.match(/<span class="skor">\s*([\s\S]*?)\s*<\/span>/i);
+    const typeMatch = block.match(/<div class="metadata">[\s\S]*?<span>\s*([A-Za-z]+)\s*<\/span>/i);
+
+    if (titleMatch && linkMatch) {
+      items.push({
+        title: titleMatch[1].trim(),
+        slug: linkMatch[1].trim(),
+        thumbnail: imgMatch ? imgMatch[1] : '',
+        synopsis: synMatch ? synMatch[1].trim() : '',
+        genres: genMatch ? genMatch[1].trim() : 'Aksi, Petualangan',
+        illustrator: ilusMatch ? ilusMatch[1].trim() : '-',
+        author: pengMatch ? pengMatch[1].trim() : '-',
+        status: statMatch ? statMatch[1].trim() : 'Berjalan',
+        score: skorMatch ? skorMatch[1].replace(/\s+/g, ' ').trim() : '8.5',
+        type: typeMatch ? typeMatch[1].trim() : 'Manhwa'
+      });
+    }
+  }
+
+  setInCache(cacheKey, items, 15 * 60 * 1000); // 15 mins cache
+  return items;
 }
 
 /**

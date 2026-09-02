@@ -3,7 +3,7 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ComicCardItem } from '@/lib/types';
+import { ComicCardItem, FeaturedSliderItem } from '@/lib/types';
 import ComicCard from '@/components/ComicCard';
 import FeaturedCarousel from '@/components/FeaturedCarousel';
 import SidebarPopular from '@/components/SidebarPopular';
@@ -16,6 +16,7 @@ function HomeContent() {
 
   const [latestComics, setLatestComics] = useState<ComicCardItem[]>([]);
   const [popularComics, setPopularComics] = useState<ComicCardItem[]>([]);
+  const [sliderItems, setSliderItems] = useState<FeaturedSliderItem[]>([]);
   const [hasNextPage, setHasNextPage] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +38,9 @@ function HomeContent() {
           if (json.popular) {
             setPopularComics(json.popular);
           }
+          if (json.slider && Array.isArray(json.slider)) {
+            setSliderItems(json.slider);
+          }
         } else {
           setError(json.error || 'Gagal memuat data komik.');
         }
@@ -56,8 +60,8 @@ function HomeContent() {
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
       {/* 1. Hero Featured Carousel (Komikindo Style) */}
-      {popularComics.length > 0 && currentPage === 1 && (
-        <FeaturedCarousel comics={popularComics} />
+      {(sliderItems.length > 0 || popularComics.length > 0) && currentPage === 1 && (
+        <FeaturedCarousel sliderItems={sliderItems} comics={popularComics} />
       )}
 
       {/* 2. Main 2-Column Grid (Main Feed + Right Sidebar) */}

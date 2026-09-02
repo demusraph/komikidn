@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getLatestComics, getPopularComics, getComicsByCategory } from '@/lib/scraper';
+import { getLatestComics, getPopularComics, getComicsByCategory, getFeaturedSlider } from '@/lib/scraper';
 
 export const runtime = 'edge';
 export const preferredRegion = 'sin1';
@@ -18,10 +18,16 @@ export async function GET(req: NextRequest) {
 
     const latest = await getLatestComics(page);
     let popular = null;
-    if (includePopular) {
-      popular = await getPopularComics();
+    let slider = null;
+    if (includePopular || page === 1) {
+      const [popData, slideData] = await Promise.all([
+        getPopularComics(),
+        getFeaturedSlider()
+      ]);
+      popular = popData;
+      slider = slideData;
     }
-    return NextResponse.json({ success: true, ...latest, popular });
+    return NextResponse.json({ success: true, ...latest, popular, slider });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

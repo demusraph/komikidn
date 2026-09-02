@@ -13,6 +13,19 @@ export interface ComicCardItem {
   } | null;
 }
 
+export interface FeaturedSliderItem {
+  title: string;
+  slug: string;
+  thumbnail: string;
+  synopsis: string;
+  genres: string;
+  illustrator: string;
+  author: string;
+  status: string;
+  score: string;
+  type: string;
+}
+
 export interface Genre {
   slug: string;
   name: string;
