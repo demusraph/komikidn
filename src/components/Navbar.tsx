@@ -64,18 +64,14 @@ export default function Navbar() {
             </span>
           </div>
 
-          {/* Center Brand Logo (Komikindo Style) */}
+          {/* Center Brand Logo (KOMIKIDN Custom Logo) */}
           <div className="flex-1 lg:flex-initial flex items-center justify-start lg:justify-center">
-            <Link href="/" className="flex items-center gap-2 group">
-              {/* Komikindo Puzzle Icon */}
-              <div className="w-8 h-8 rounded bg-[#0084ff] flex items-center justify-center text-white shadow-sm group-hover:bg-[#00a2ff] transition-colors">
-                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
-                  <path d="M19 12h-2V8a2 2 0 0 0-2-2h-4V4a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2zM9 18H5v-4h4v4zm0-6H5V8h4v4zm0-6H5V4h4v2zm6 12h-4v-4h4v4zm0-6h-4V8h4v4zm4 6h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
-                </svg>
-              </div>
-              <span className="text-xl sm:text-2xl font-bold tracking-tight text-white font-sans">
-                komik<span className="text-[#00a2ff]">idn</span>
-              </span>
+            <Link href="/" className="flex items-center group">
+              <img
+                src="/logo.png"
+                alt="KOMIKIDN"
+                className="h-9 sm:h-10 w-auto object-contain brightness-110 drop-shadow group-hover:scale-105 transition-transform duration-200"
+              />
             </Link>
           </div>
 

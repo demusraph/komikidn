@@ -8,16 +8,13 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 space-y-6">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4">
           {/* Brand */}
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded bg-[#0084ff] flex items-center justify-center text-white">
-              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                <path d="M19 12h-2V8a2 2 0 0 0-2-2h-4V4a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2zM9 18H5v-4h4v4zm0-6H5V8h4v4zm0-6H5V4h4v2zm6 12h-4v-4h4v4zm0-6h-4V8h4v4zm4 6h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
-              </svg>
-            </div>
-            <span className="font-bold text-base text-white">
-              komik<span className="text-[#00a2ff]">idn</span>
-            </span>
-          </div>
+          <Link href="/" className="flex items-center gap-2 group">
+            <img
+              src="/logo.png"
+              alt="KOMIKIDN"
+              className="h-8 w-auto object-contain brightness-110"
+            />
+          </Link>
 
           {/* Badges */}
           <div className="flex items-center gap-3">
