@@ -40,7 +40,21 @@ function setInCache<T>(key: string, data: T, ttlMs: number): void {
   });
 }
 
+/**
+ * Defensive Security: Sanitize slugs to prevent Path Traversal, SSRF, & URL Spoofing
+ */
+export function sanitizeSlug(slug: string): string {
+  if (!slug || typeof slug !== 'string') return '';
+  // Only allow alphanumeric, hyphens, and underscores
+  return slug.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 150);
+}
+
 async function fetchHtml(path: string): Promise<string> {
+  // Prevent path traversal, protocol injection, control characters, and invalid paths
+  if (!path || path.includes('..') || path.includes('//') || path.includes('\\') || /[\r\n\0]/.test(path)) {
+    throw new Error('Invalid path parameter detected');
+  }
+
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
   let lastError: any = null;
 
@@ -117,17 +131,20 @@ export async function getComicsByCategory(
   category: string,
   page = 1
 ): Promise<{ category: string; page: number; hasNextPage: boolean; data: ComicCardItem[] }> {
-  const cleanCat = category.toLowerCase().trim();
-  const cacheKey = `cat_${cleanCat}_p${page}`;
+  const cleanCat = sanitizeSlug(category).toLowerCase();
+  const safePage = Math.max(1, Math.min(100, Math.floor(Number(page) || 1)));
+  if (!cleanCat) return { category: '', page: safePage, hasNextPage: false, data: [] };
+
+  const cacheKey = `cat_${cleanCat}_p${safePage}`;
   const cached = getFromCache<{ category: string; page: number; hasNextPage: boolean; data: ComicCardItem[] }>(cacheKey);
   if (cached) return cached;
 
-  const path = page === 1 ? `/${cleanCat}/` : `/${cleanCat}/page/${page}/`;
+  const path = safePage === 1 ? `/${cleanCat}/` : `/${cleanCat}/page/${safePage}/`;
   const html = await fetchHtml(path);
 
   const cards = parseCardsFromHtml(html);
-  const hasNextPage = html.includes(`/page/${page + 1}/`);
-  const result = { category: cleanCat, page, hasNextPage, data: cards };
+  const hasNextPage = html.includes(`/page/${safePage + 1}/`);
+  const result = { category: cleanCat, page: safePage, hasNextPage, data: cards };
 
   setInCache(cacheKey, result, 5 * 60 * 1000); // 5 mins cache
   return result;
@@ -140,17 +157,20 @@ export async function getComicsByGenre(
   genreSlug: string,
   page = 1
 ): Promise<{ genre: string; page: number; hasNextPage: boolean; data: ComicCardItem[] }> {
-  const cleanGenre = genreSlug.toLowerCase().trim();
-  const cacheKey = `genre_${cleanGenre}_p${page}`;
+  const cleanGenre = sanitizeSlug(genreSlug).toLowerCase();
+  const safePage = Math.max(1, Math.min(100, Math.floor(Number(page) || 1)));
+  if (!cleanGenre) return { genre: '', page: safePage, hasNextPage: false, data: [] };
+
+  const cacheKey = `genre_${cleanGenre}_p${safePage}`;
   const cached = getFromCache<{ genre: string; page: number; hasNextPage: boolean; data: ComicCardItem[] }>(cacheKey);
   if (cached) return cached;
 
-  const path = page === 1 ? `/genres/${cleanGenre}/` : `/genres/${cleanGenre}/page/${page}/`;
+  const path = safePage === 1 ? `/genres/${cleanGenre}/` : `/genres/${cleanGenre}/page/${safePage}/`;
   const html = await fetchHtml(path);
 
   const cards = parseCardsFromHtml(html);
-  const hasNextPage = html.includes(`/page/${page + 1}/`);
-  const result = { genre: cleanGenre, page, hasNextPage, data: cards };
+  const hasNextPage = html.includes(`/page/${safePage + 1}/`);
+  const result = { genre: cleanGenre, page: safePage, hasNextPage, data: cards };
 
   setInCache(cacheKey, result, 5 * 60 * 1000);
   return result;
@@ -228,13 +248,15 @@ export async function getFeaturedSlider(): Promise<FeaturedSliderItem[]> {
  * 5. Pencarian Komik
  */
 export async function searchComics(query: string, page = 1): Promise<{ query: string; page: number; data: ComicCardItem[] }> {
-  if (!query.trim()) return { query, page, data: [] };
+  const safeQuery = query.replace(/[^\w\s\-\.]/gi, '').trim().slice(0, 80);
+  const safePage = Math.max(1, Math.min(100, Math.floor(Number(page) || 1)));
+  if (!safeQuery) return { query: '', page: safePage, data: [] };
   
-  const cacheKey = `search_${encodeURIComponent(query.toLowerCase())}_p${page}`;
+  const cacheKey = `search_${encodeURIComponent(safeQuery.toLowerCase())}_p${safePage}`;
   const cached = getFromCache<{ query: string; page: number; data: ComicCardItem[] }>(cacheKey);
   if (cached) return cached;
 
-  const path = page === 1 ? `/?s=${encodeURIComponent(query)}` : `/page/${page}/?s=${encodeURIComponent(query)}`;
+  const path = safePage === 1 ? `/?s=${encodeURIComponent(safeQuery)}` : `/page/${safePage}/?s=${encodeURIComponent(safeQuery)}`;
   const html = await fetchHtml(path);
 
   const cards: ComicCardItem[] = [];
@@ -268,7 +290,7 @@ export async function searchComics(query: string, page = 1): Promise<{ query: st
     });
   }
 
-  const result = { query, page, data: cards };
+  const result = { query: safeQuery, page: safePage, data: cards };
   setInCache(cacheKey, result, 5 * 60 * 1000);
   return result;
 }
@@ -277,11 +299,14 @@ export async function searchComics(query: string, page = 1): Promise<{ query: st
  * 6. Detail Komik & Daftar Lengkap Chapter
  */
 export async function getComicDetail(comicSlug: string): Promise<ComicDetail> {
-  const cacheKey = `comic_${comicSlug}`;
+  const safeSlug = sanitizeSlug(comicSlug);
+  if (!safeSlug) throw new Error('Invalid comic slug');
+
+  const cacheKey = `comic_${safeSlug}`;
   const cached = getFromCache<ComicDetail>(cacheKey);
   if (cached) return cached;
 
-  const path = `/komik/${comicSlug}/`;
+  const path = `/komik/${safeSlug}/`;
   const html = await fetchHtml(path);
 
   const titleMatch = html.match(/<h1[^>]*class=["']entry-title["'][^>]*>([\s\S]*?)<\/h1>/i) ||
@@ -346,11 +371,14 @@ export async function getComicDetail(comicSlug: string): Promise<ComicDetail> {
  * 7. Halaman Baca Chapter (100% Bebas Iklan Judol & Popunder)
  */
 export async function getChapterImages(chapterSlug: string): Promise<ChapterData> {
-  const cacheKey = `chap_${chapterSlug}`;
+  const safeSlug = sanitizeSlug(chapterSlug);
+  if (!safeSlug) throw new Error('Invalid chapter slug');
+
+  const cacheKey = `chap_${safeSlug}`;
   const cached = getFromCache<ChapterData>(cacheKey);
   if (cached) return cached;
 
-  const path = `/${chapterSlug}/`;
+  const path = `/${safeSlug}/`;
   const html = await fetchHtml(path);
 
   const prevMatch = html.match(/<a[^>]+href=["']https?:\/\/komikindo\.[a-z]+\/([^"'\/]+)\/?["'][^>]*rel=["']prev["']/i) ||
@@ -359,9 +387,9 @@ export async function getChapterImages(chapterSlug: string): Promise<ChapterData
                     html.match(/<div class=["']nextprev["']>[\s\S]*?<a href=["']https?:\/\/komikindo\.[a-z]+\/([^"'\/]+)\/?["'][^>]*class=["']ch-next-btn["']/i);
   const comicMatch = html.match(/<a[^>]+href=["']https?:\/\/komikindo\.[a-z]+\/komik\/([^"'\/]+)\/?["'][^>]*>/i);
 
-  const prevChapter = prevMatch ? prevMatch[1] : null;
-  const nextChapter = nextMatch ? nextMatch[1] : null;
-  const comicSlug = comicMatch ? comicMatch[1] : null;
+  const prevChapter = prevMatch ? sanitizeSlug(prevMatch[1]) : null;
+  const nextChapter = nextMatch ? sanitizeSlug(nextMatch[1]) : null;
+  const comicSlug = comicMatch ? sanitizeSlug(comicMatch[1]) : null;
 
   let images: string[] = [];
   const chimgMatch = html.match(/<div[^>]+id=["'](chimg-[a-z0-9_-]+)["'][^>]*>([\s\S]*?)<\/div>/i);
@@ -373,13 +401,16 @@ export async function getChapterImages(chapterSlug: string): Promise<ChapterData
   }
 
   // Filter ketat: buang semua GIF blogger judol dan gambar favicon/logo
-  const cleanImages = images.filter(img =>
-    !img.includes('blogger.googleusercontent.com') &&
-    !img.includes('.gif') &&
-    !img.includes('fav.png') &&
-    !img.includes('komikindo') &&
-    (img.includes('/data/') || img.includes('.jpeg') || img.includes('.jpg') || img.includes('.webp') || img.includes('.png'))
-  );
+  const cleanImages = images
+    .map(img => img.trim())
+    .filter(img =>
+      (img.startsWith('http://') || img.startsWith('https://')) &&
+      !img.includes('blogger.googleusercontent.com') &&
+      !img.includes('.gif') &&
+      !img.includes('fav.png') &&
+      !img.includes('komikindo') &&
+      (img.includes('/data/') || img.includes('.jpeg') || img.includes('.jpg') || img.includes('.webp') || img.includes('.png'))
+    );
 
   const result: ChapterData = {
     chapterSlug,

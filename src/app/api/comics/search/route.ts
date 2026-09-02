@@ -6,13 +6,16 @@ export const preferredRegion = 'sin1';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const q = searchParams.get('q') || '';
+  const rawQ = searchParams.get('q') || '';
   const page = parseInt(searchParams.get('page') || '1', 10);
+
+  // Input length and character hygiene
+  const q = rawQ.slice(0, 100);
 
   try {
     const results = await searchComics(q, page);
     return NextResponse.json({ success: true, ...results });
   } catch (error: any) {
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: 'Gagal memproses pencarian' }, { status: 500 });
   }
 }
