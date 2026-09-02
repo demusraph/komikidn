@@ -1,8 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
-import Navbar from '@/components/Navbar';
-import Footer from '@/components/Footer';
-import MobileNav from '@/components/MobileNav';
+import LayoutWrapper from '@/components/LayoutWrapper';
 
 export const metadata: Metadata = {
   title: 'KOMIKIDN - Baca Komik Manga, Manhwa, Manhua Bebas Iklan',
@@ -29,13 +27,10 @@ export default function RootLayout({
         <link rel="shortcut icon" href="/icon.png" type="image/png" />
         <link rel="apple-touch-icon" href="/icon.png" />
       </head>
-      <body className="min-h-screen flex flex-col bg-[#161616] text-[#ffffff] antialiased selection:bg-[#0084ff] selection:text-white pb-14 lg:pb-0">
-        <Navbar />
-        <div className="flex-1">
+      <body className="bg-[#161616] text-[#ffffff] antialiased selection:bg-[#0084ff] selection:text-white">
+        <LayoutWrapper>
           {children}
-        </div>
-        <Footer />
-        <MobileNav />
+        </LayoutWrapper>
       </body>
     </html>
   );

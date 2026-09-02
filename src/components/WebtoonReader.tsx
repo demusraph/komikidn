@@ -1,10 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChapterData } from '@/lib/types';
-import { ChevronLeft, ChevronRight, BookOpen, ArrowLeft, ArrowUp, Maximize2, Minimize2, Settings } from 'lucide-react';
+import { ChevronLeft, ChevronRight, BookOpen, ArrowLeft, ArrowUp, Maximize2, Sparkles } from 'lucide-react';
 
 interface WebtoonReaderProps {
   chapterData: ChapterData;
@@ -21,6 +21,8 @@ export default function WebtoonReader({
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [scrollProgress, setScrollProgress] = useState(0);
   const [readerWidth, setReaderWidth] = useState<'normal' | 'wide' | 'full'>('normal');
+  const [isHeaderVisible, setIsHeaderVisible] = useState(true);
+  const lastScrollY = useRef(0);
 
   // Mark as read & save history
   useEffect(() => {
@@ -48,16 +50,31 @@ export default function WebtoonReader({
     } catch {}
   }, [chapterData.chapterSlug, chapterData.comicSlug, comicTitle]);
 
-  // Scroll Progress and Scroll-to-Top Listener
+  // Smart Auto-Hide Header on Scroll Down, Show on Scroll Up
   useEffect(() => {
     const handleScroll = () => {
+      const currentScrollY = window.scrollY;
       const totalScroll = document.documentElement.scrollHeight - window.innerHeight;
+
       if (totalScroll > 0) {
-        const currentProgress = (window.scrollY / totalScroll) * 100;
+        const currentProgress = (currentScrollY / totalScroll) * 100;
         setScrollProgress(Math.min(100, Math.max(0, currentProgress)));
       }
-      setShowScrollTop(window.scrollY > 400);
+
+      setShowScrollTop(currentScrollY > 400);
+
+      // Scroll direction detection
+      if (currentScrollY > lastScrollY.current && currentScrollY > 60) {
+        // Scrolling down -> Hide header
+        setIsHeaderVisible(false);
+      } else {
+        // Scrolling up -> Show header
+        setIsHeaderVisible(true);
+      }
+
+      lastScrollY.current = currentScrollY;
     };
+
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -90,9 +107,13 @@ export default function WebtoonReader({
     }
   };
 
+  const toggleHeader = () => {
+    setIsHeaderVisible((prev) => !prev);
+  };
+
   return (
-    <div className="min-h-screen bg-[#0d0d0d] text-white flex flex-col items-center select-none">
-      {/* 1. Top Real-time Reading Progress Bar */}
+    <div className="min-h-screen bg-[#000000] text-white flex flex-col items-center select-none">
+      {/* 1. Real-time Reading Progress Bar */}
       <div className="fixed top-0 inset-x-0 h-1 bg-[#1a1a1a] z-50">
         <div
           className="h-full bg-gradient-to-r from-[#0084ff] to-[#00d2ff] transition-all duration-150"
@@ -100,15 +121,19 @@ export default function WebtoonReader({
         />
       </div>
 
-      {/* 2. Top Controls Header (Komikindo Reader Bar) */}
-      <div className="sticky top-0 z-40 w-full bg-[#141414]/95 backdrop-blur border-b border-[#262626] px-4 py-2.5 shadow-md">
-        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+      {/* 2. Top Controls Header (Auto-Hiding on Scroll Down) */}
+      <div
+        className={`fixed top-0 inset-x-0 z-40 bg-[#141414]/95 backdrop-blur border-b border-[#262626] px-4 py-2.5 shadow-xl transition-transform duration-300 ease-in-out ${
+          isHeaderVisible ? 'translate-y-0' : '-translate-y-full'
+        }`}
+      >
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3">
           {/* Comic Title & Back Button */}
           <div className="flex items-center gap-2 truncate w-full sm:w-auto">
             {chapterData.comicSlug && (
               <Link
                 href={`/komik/${chapterData.comicSlug}`}
-                className="px-2.5 py-1.5 rounded bg-[#222222] hover:bg-[#333333] text-xs font-semibold text-[#cccccc] hover:text-white flex items-center gap-1 border border-[#333333] transition-colors"
+                className="px-2.5 py-1.5 rounded bg-[#222222] hover:bg-[#333333] text-xs font-semibold text-[#cccccc] hover:text-white flex items-center gap-1 border border-[#333333] transition-colors flex-shrink-0"
                 title="Kembali ke Detail Komik"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
@@ -185,10 +210,13 @@ export default function WebtoonReader({
       </div>
 
       {/* 3. Image Stream (Continuous Vertical Webtoon) */}
-      <main className={`w-full ${getContainerMaxWidth()} flex flex-col items-center py-4 transition-all duration-300`}>
+      <main
+        onClick={toggleHeader}
+        className={`w-full ${getContainerMaxWidth()} flex flex-col items-center pt-14 pb-4 transition-all duration-300 cursor-pointer`}
+      >
         {chapterData.images.length > 0 ? (
           chapterData.images.map((imgUrl, idx) => (
-            <div key={idx} className="w-full bg-[#0d0d0d] flex justify-center relative">
+            <div key={idx} className="w-full bg-[#000000] flex justify-center relative">
               <img
                 src={imgUrl}
                 alt={`Halaman ${idx + 1} - ${comicTitle}`}
@@ -205,7 +233,7 @@ export default function WebtoonReader({
       </main>
 
       {/* 4. Bottom Navigation Controls Bar */}
-      <div className="w-full bg-[#141414] border-t border-[#262626] py-8 px-4 mt-6">
+      <div className="w-full bg-[#111111] border-t border-[#262626] py-8 px-4">
         <div className="max-w-xl mx-auto flex flex-col items-center space-y-4">
           <div className="text-xs text-[#888888] font-mono">
             Selesai membaca &bull; {chapterData.totalImages} Halaman ({Math.round(scrollProgress)}%)
@@ -235,7 +263,7 @@ export default function WebtoonReader({
               href={`/komik/${chapterData.comicSlug}`}
               className="text-xs text-[#00a2ff] hover:underline flex items-center gap-1.5 pt-2"
             >
-              <BookOpen className="w-4 h-4" /> Lihat Daftar Semua Chapter {comicTitle}
+              <BookOpen className="w-3.5 h-3.5" /> Lihat Daftar Semua Chapter {comicTitle}
             </Link>
           )}
         </div>
@@ -247,7 +275,7 @@ export default function WebtoonReader({
           onClick={scrollToTop}
           aria-label="Scroll ke atas"
           title="Scroll ke atas"
-          className="fixed bottom-20 right-6 w-11 h-11 rounded-full bg-[#0084ff] hover:bg-[#0070db] text-white flex items-center justify-center shadow-2xl transition-all hover:scale-110 z-50 border border-white/10"
+          className="fixed bottom-6 right-6 w-11 h-11 rounded-full bg-[#0084ff] hover:bg-[#0070db] text-white flex items-center justify-center shadow-2xl transition-all hover:scale-110 z-50 border border-white/10"
         >
           <ArrowUp className="w-5 h-5" />
         </button>
