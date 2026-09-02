@@ -1,6 +1,7 @@
 import { ComicCardItem, ComicDetail, ChapterData, Genre, ComicType } from './types';
 
-const BASE_URL = 'https://komikindo.ch';
+const BASE_HOSTS = ['https://komikindo.ch', 'https://komikindo.org'];
+
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
@@ -12,8 +13,7 @@ const HEADERS = {
   'Sec-Fetch-Mode': 'navigate',
   'Sec-Fetch-Site': 'none',
   'Sec-Fetch-User': '?1',
-  'Upgrade-Insecure-Requests': '1',
-  'Referer': 'https://komikindo.ch/'
+  'Upgrade-Insecure-Requests': '1'
 };
 
 // In-Memory Cache with TTL
@@ -40,12 +40,30 @@ function setInCache<T>(key: string, data: T, ttlMs: number): void {
   });
 }
 
-async function fetchHtml(url: string): Promise<string> {
-  const res = await fetch(url, { headers: HEADERS, next: { revalidate: 180 } });
-  if (!res.ok) {
-    throw new Error(`HTTP error ${res.status} when fetching ${url}`);
+async function fetchHtml(path: string): Promise<string> {
+  const cleanPath = path.startsWith('/') ? path : `/${path}`;
+  let lastError: any = null;
+
+  for (const host of BASE_HOSTS) {
+    const url = `${host}${cleanPath}`;
+    try {
+      const res = await fetch(url, {
+        headers: {
+          ...HEADERS,
+          Referer: `${host}/`
+        },
+        next: { revalidate: 180 }
+      });
+      if (res.ok) {
+        return await res.text();
+      }
+      lastError = new Error(`HTTP error ${res.status} when fetching ${url}`);
+    } catch (e: any) {
+      lastError = e;
+    }
   }
-  return await res.text();
+
+  throw lastError || new Error(`Failed to fetch ${path} from all mirror hosts`);
 }
 
 function parseCardsFromHtml(html: string): ComicCardItem[] {
@@ -55,7 +73,7 @@ function parseCardsFromHtml(html: string): ComicCardItem[] {
 
   while ((match = regex.exec(html)) !== null) {
     const cardHtml = match[1];
-    const urlMatch = cardHtml.match(/href=["']https?:\/\/komikindo\.ch\/komik\/([^"'\/]+)\/?["']/i);
+    const urlMatch = cardHtml.match(/href=["']https?:\/\/komikindo\.[a-z]+\/komik\/([^"'\/]+)\/?["']/i);
     if (!urlMatch) continue;
     const slug = urlMatch[1];
 
@@ -72,7 +90,7 @@ function parseCardsFromHtml(html: string): ComicCardItem[] {
 
     const isColor = cardHtml.includes('warnalabel');
 
-    const chapMatch = cardHtml.match(/<div class=["']lsch["']>[\s\S]*?<a\s+href=["']https?:\/\/komikindo\.ch\/([^"'\/]+)\/?["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?<span class=["']datech["']>([\s\S]*?)<\/span>/i);
+    const chapMatch = cardHtml.match(/<div class=["']lsch["']>[\s\S]*?<a\s+href=["']https?:\/\/komikindo\.[a-z]+\/([^"'\/]+)\/?["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?<span class=["']datech["']>([\s\S]*?)<\/span>/i);
     const latestChapter = chapMatch ? {
       slug: chapMatch[1],
       title: chapMatch[2].replace(/<[^>]+>/g, '').trim(),
@@ -104,8 +122,8 @@ export async function getComicsByCategory(
   const cached = getFromCache<{ category: string; page: number; hasNextPage: boolean; data: ComicCardItem[] }>(cacheKey);
   if (cached) return cached;
 
-  const url = page === 1 ? `${BASE_URL}/${cleanCat}/` : `${BASE_URL}/${cleanCat}/page/${page}/`;
-  const html = await fetchHtml(url);
+  const path = page === 1 ? `/${cleanCat}/` : `/${cleanCat}/page/${page}/`;
+  const html = await fetchHtml(path);
 
   const cards = parseCardsFromHtml(html);
   const hasNextPage = html.includes(`/page/${page + 1}/`);
@@ -127,8 +145,8 @@ export async function getComicsByGenre(
   const cached = getFromCache<{ genre: string; page: number; hasNextPage: boolean; data: ComicCardItem[] }>(cacheKey);
   if (cached) return cached;
 
-  const url = page === 1 ? `${BASE_URL}/genres/${cleanGenre}/` : `${BASE_URL}/genres/${cleanGenre}/page/${page}/`;
-  const html = await fetchHtml(url);
+  const path = page === 1 ? `/genres/${cleanGenre}/` : `/genres/${cleanGenre}/page/${page}/`;
+  const html = await fetchHtml(path);
 
   const cards = parseCardsFromHtml(html);
   const hasNextPage = html.includes(`/page/${page + 1}/`);
@@ -154,8 +172,7 @@ export async function getPopularComics(): Promise<ComicCardItem[]> {
   const cached = getFromCache<ComicCardItem[]>(cacheKey);
   if (cached) return cached;
 
-  const url = `${BASE_URL}/komik-populer/`;
-  const html = await fetchHtml(url);
+  const html = await fetchHtml('/komik-populer/');
   const cards = parseCardsFromHtml(html);
 
   setInCache(cacheKey, cards, 15 * 60 * 1000); // 15 mins cache
@@ -172,8 +189,8 @@ export async function searchComics(query: string, page = 1): Promise<{ query: st
   const cached = getFromCache<{ query: string; page: number; data: ComicCardItem[] }>(cacheKey);
   if (cached) return cached;
 
-  const url = page === 1 ? `${BASE_URL}/?s=${encodeURIComponent(query)}` : `${BASE_URL}/page/${page}/?s=${encodeURIComponent(query)}`;
-  const html = await fetchHtml(url);
+  const path = page === 1 ? `/?s=${encodeURIComponent(query)}` : `/page/${page}/?s=${encodeURIComponent(query)}`;
+  const html = await fetchHtml(path);
 
   const cards: ComicCardItem[] = [];
   const regex = /<div class=["']animepost["']>([\s\S]*?)<\/div>\s*<\/div>/gi;
@@ -181,7 +198,7 @@ export async function searchComics(query: string, page = 1): Promise<{ query: st
 
   while ((match = regex.exec(html)) !== null) {
     const cardHtml = match[1];
-    const urlMatch = cardHtml.match(/href=["']https?:\/\/komikindo\.ch\/komik\/([^"'\/]+)\/?["']/i);
+    const urlMatch = cardHtml.match(/href=["']https?:\/\/komikindo\.[a-z]+\/komik\/([^"'\/]+)\/?["']/i);
     if (!urlMatch) continue;
     const slug = urlMatch[1];
 
@@ -219,8 +236,8 @@ export async function getComicDetail(comicSlug: string): Promise<ComicDetail> {
   const cached = getFromCache<ComicDetail>(cacheKey);
   if (cached) return cached;
 
-  const url = `${BASE_URL}/komik/${comicSlug}/`;
-  const html = await fetchHtml(url);
+  const path = `/komik/${comicSlug}/`;
+  const html = await fetchHtml(path);
 
   const titleMatch = html.match(/<h1[^>]*class=["']entry-title["'][^>]*>([\s\S]*?)<\/h1>/i) ||
                      html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
@@ -242,7 +259,7 @@ export async function getComicDetail(comicSlug: string): Promise<ComicDetail> {
   const synopsisMatch = html.match(/<div[^>]+class=["']entry-content[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
   const synopsis = synopsisMatch ? synopsisMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim() : '';
 
-  const genresRaw = [...html.matchAll(/href=["'](?:https?:\/\/komikindo\.ch)?\/genres\/([^"'\/]+)\/?["'][^>]*>([\s\S]*?)<\/a>/gi)]
+  const genresRaw = [...html.matchAll(/href=["'](?:https?:\/\/komikindo\.[a-z]+)?\/genres\/([^"'\/]+)\/?["'][^>]*>([\s\S]*?)<\/a>/gi)]
     .map(g => ({ slug: g[1], name: g[2].replace(/<[^>]+>/g, '').trim() }));
 
   const genres: Genre[] = [];
@@ -255,7 +272,7 @@ export async function getComicDetail(comicSlug: string): Promise<ComicDetail> {
   }
 
   const chapters = [];
-  const chapterRegex = /<li[^>]*>[\s\S]*?<span class=["']lchx["']>[\s\S]*?<a\s+href=["']https?:\/\/komikindo\.ch\/([^"'\/]+)\/?["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/span>[\s\S]*?<span class=["']dt["']>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/gi;
+  const chapterRegex = /<li[^>]*>[\s\S]*?<span class=["']lchx["']>[\s\S]*?<a\s+href=["']https?:\/\/komikindo\.[a-z]+\/([^"'\/]+)\/?["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/span>[\s\S]*?<span class=["']dt["']>[\s\S]*?<a[^>]*>([\s\S]*?)<\/a>/gi;
   let cMatch;
   while ((cMatch = chapterRegex.exec(html)) !== null) {
     chapters.push({
@@ -288,14 +305,14 @@ export async function getChapterImages(chapterSlug: string): Promise<ChapterData
   const cached = getFromCache<ChapterData>(cacheKey);
   if (cached) return cached;
 
-  const url = `${BASE_URL}/${chapterSlug}/`;
-  const html = await fetchHtml(url);
+  const path = `/${chapterSlug}/`;
+  const html = await fetchHtml(path);
 
-  const prevMatch = html.match(/<a[^>]+href=["']https?:\/\/komikindo\.ch\/([^"'\/]+)\/?["'][^>]*rel=["']prev["']/i) ||
-                    html.match(/<div class=["']nextprev["']>[\s\S]*?<a href=["']https?:\/\/komikindo\.ch\/([^"'\/]+)\/?["'][^>]*class=["']ch-prev-btn["']/i);
-  const nextMatch = html.match(/<a[^>]+href=["']https?:\/\/komikindo\.ch\/([^"'\/]+)\/?["'][^>]*rel=["']next["']/i) ||
-                    html.match(/<div class=["']nextprev["']>[\s\S]*?<a href=["']https?:\/\/komikindo\.ch\/([^"'\/]+)\/?["'][^>]*class=["']ch-next-btn["']/i);
-  const comicMatch = html.match(/<a[^>]+href=["']https?:\/\/komikindo\.ch\/komik\/([^"'\/]+)\/?["'][^>]*>/i);
+  const prevMatch = html.match(/<a[^>]+href=["']https?:\/\/komikindo\.[a-z]+\/([^"'\/]+)\/?["'][^>]*rel=["']prev["']/i) ||
+                    html.match(/<div class=["']nextprev["']>[\s\S]*?<a href=["']https?:\/\/komikindo\.[a-z]+\/([^"'\/]+)\/?["'][^>]*class=["']ch-prev-btn["']/i);
+  const nextMatch = html.match(/<a[^>]+href=["']https?:\/\/komikindo\.[a-z]+\/([^"'\/]+)\/?["'][^>]*rel=["']next["']/i) ||
+                    html.match(/<div class=["']nextprev["']>[\s\S]*?<a href=["']https?:\/\/komikindo\.[a-z]+\/([^"'\/]+)\/?["'][^>]*class=["']ch-next-btn["']/i);
+  const comicMatch = html.match(/<a[^>]+href=["']https?:\/\/komikindo\.[a-z]+\/komik\/([^"'\/]+)\/?["'][^>]*>/i);
 
   const prevChapter = prevMatch ? prevMatch[1] : null;
   const nextChapter = nextMatch ? nextMatch[1] : null;
