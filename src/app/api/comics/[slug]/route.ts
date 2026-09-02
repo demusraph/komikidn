@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getComicDetail } from '@/lib/scraper';
 
+export const runtime = 'edge';
+export const preferredRegion = 'sin1';
+
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ slug: string }> }
